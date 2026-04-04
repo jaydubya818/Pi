@@ -1,0 +1,224 @@
+app:
+  name: pi-multi-team-local
+  sessions_dir: ./.runtime/sessions
+  session_mode: per_request
+  repo_root: .
+  default_show_workers: true
+  default_timeout_ms: 900000
+
+models:
+  strategist: claude-opus
+  lead: claude-opus
+  worker: claude-sonnet
+
+parallelism:
+  max_parallel_workers: 2
+
+approval:
+  max_files_touch: 12
+  max_lines_changed: 500
+
+git:
+  commits_enabled: false
+  create_session_branch: false
+  require_approval_before_commit: true
+  session_branch_prefix: pi-multi
+
+features:
+  enable_replay: true
+  enable_worker_toggle: true
+  enable_memory_updates: true
+  enable_policy_enforcement: true
+  enable_cost_tracking: true
+
+global_autonomy: active
+
+orchestrator:
+  name: orchestrator
+  model: claude-opus
+  thinking: high
+  system_prompt: ./.pi/prompts/orchestrator.md
+  expertise:
+    writable:
+      - ./.pi/experts/orchestrator.md
+    readonly: []
+  skills:
+    - active-listener
+    - mental-model
+    - delegation-protocol
+    - synthesis-first-reporting
+  domain:
+    read:
+      - .
+    write:
+      - ./.runtime
+      - ./.pi/experts
+      - ./handoffs
+      - ./plans
+      - ./validation
+
+teams:
+  - id: planning
+    color: cyan
+    enabled: true
+    lead:
+      name: planning_lead
+      model: claude-opus
+      system_prompt: ./.pi/prompts/lead.md
+      expertise:
+        writable:
+          - ./.pi/experts/planning_lead.md
+      skills:
+        - zero-micromanagement
+        - delegation-protocol
+        - planning-handoff-discipline
+      tools:
+        - delegate
+      domain:
+        read:
+          - .
+        write:
+          - ./plans
+          - ./handoffs
+          - ./.pi/experts
+          - ./.runtime
+    members:
+      - name: product_pragmatist
+        model: claude-sonnet
+        system_prompt: ./.pi/prompts/worker.md
+        expertise:
+          writable:
+            - ./.pi/experts/product_pragmatist.md
+        skills:
+          - mental-model
+          - artifact-first-reporting
+        domain:
+          read:
+            - .
+          write:
+            - ./plans
+            - ./.pi/experts
+      - name: spec_writer
+        model: claude-sonnet
+        system_prompt: ./.pi/prompts/worker.md
+        expertise:
+          writable:
+            - ./.pi/experts/spec_writer.md
+        skills:
+          - mental-model
+          - artifact-first-reporting
+        domain:
+          read:
+            - .
+          write:
+            - ./plans
+            - ./.pi/experts
+
+  - id: engineering
+    color: green
+    enabled: true
+    lead:
+      name: engineering_lead
+      model: claude-opus
+      system_prompt: ./.pi/prompts/lead.md
+      expertise:
+        writable:
+          - ./.pi/experts/engineering_lead.md
+      skills:
+        - zero-micromanagement
+        - implementation-handoff-discipline
+        - delegation-protocol
+      domain:
+        read:
+          - .
+        write:
+          - ./handoffs
+          - ./.pi/experts
+          - ./.runtime
+    members:
+      - name: backend_dev
+        model: claude-sonnet
+        system_prompt: ./.pi/prompts/worker.md
+        expertise:
+          writable:
+            - ./.pi/experts/backend_dev.md
+        skills:
+          - backend-implementation-discipline
+        domain:
+          read:
+            - .
+          write:
+            - ./apps/api
+            - ./packages/backend
+            - ./src
+            - ./server
+            - ./.pi/experts
+            - ./.runtime
+      - name: frontend_dev
+        model: claude-sonnet
+        system_prompt: ./.pi/prompts/worker.md
+        expertise:
+          writable:
+            - ./.pi/experts/frontend_dev.md
+        skills:
+          - frontend-implementation-discipline
+        domain:
+          read:
+            - .
+          write:
+            - ./apps/web
+            - ./packages/ui
+            - ./src
+            - ./client
+            - ./.pi/experts
+            - ./.runtime
+
+  - id: validation
+    color: yellow
+    enabled: true
+    lead:
+      name: validation_lead
+      model: claude-opus
+      system_prompt: ./.pi/prompts/lead.md
+      expertise:
+        writable:
+          - ./.pi/experts/validation_lead.md
+      skills:
+        - validation-handoff-discipline
+        - delegation-protocol
+      domain:
+        read:
+          - .
+        write:
+          - ./validation
+          - ./.pi/experts
+          - ./.runtime
+    members:
+      - name: qa_engineer
+        model: claude-sonnet
+        system_prompt: ./.pi/prompts/worker.md
+        expertise:
+          writable:
+            - ./.pi/experts/qa_engineer.md
+        skills:
+          - test-validation-discipline
+        domain:
+          read:
+            - .
+          write:
+            - ./validation
+            - ./.pi/experts
+      - name: security_reviewer
+        model: claude-sonnet
+        system_prompt: ./.pi/prompts/worker.md
+        expertise:
+          writable:
+            - ./.pi/experts/security_reviewer.md
+        skills:
+          - security-review-discipline
+        domain:
+          read:
+            - .
+          write:
+            - ./validation
+            - ./.pi/experts
