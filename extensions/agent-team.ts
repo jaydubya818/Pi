@@ -6,8 +6,9 @@
  * maintains its own Pi session for cross-invocation memory.
  *
  * Loads agent definitions from agents/*.md, .claude/agents/*.md, .pi/agents/*.md.
- * Teams are defined in .pi/agents/teams.yaml — on boot a select dialog lets
- * you pick which team to work with. Only team members are available for dispatch.
+ * Teams are defined in .pi/agents/teams.yaml. On boot a select dialog appears
+ * when multiple teams exist; single-team repos activate silently. Only team
+ * members are available for dispatch.
  *
  * Commands:
  *   /agents-team          — switch active team
@@ -24,6 +25,7 @@ import { spawn } from "child_process";
 import { readdirSync, readFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
 import { join, resolve } from "path";
 import { applyExtensionDefaults } from "./themeMap.ts";
+import { contextBar } from "./formatters.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -56,19 +58,47 @@ function displayName(name: string): string {
 
 // ── Teams YAML Parser ────────────────────────────
 
-function parseTeamsYaml(raw: string): Record<string, string[]> {
-	const teams: Record<string, string[]> = {};
+interface TeamDef {
+	members: string[];
+	/** Short human-readable description shown in the boot-time select dialog. */
+	description: string;
+}
+
+/**
+ * Parse teams.yaml.  Supports two formats:
+ *
+ *   Structured (preferred):
+ *     teamName:
+ *       description: "Short purpose statement"
+ *       members:
+ *         - agent-one
+ *
+ *   Flat-list (legacy, still supported):
+ *     teamName:
+ *       - agent-one
+ */
+function parseTeamsYaml(raw: string): Record<string, TeamDef> {
+	const teams: Record<string, TeamDef> = {};
 	let current: string | null = null;
 	for (const line of raw.split("\n")) {
+		// Top-level team key: starts at column 0, ends with ":"
 		const teamMatch = line.match(/^(\S[^:]*):$/);
 		if (teamMatch) {
 			current = teamMatch[1].trim();
-			teams[current] = [];
+			teams[current] = { members: [], description: "" };
 			continue;
 		}
+		if (!current) continue;
+		// description: scalar under the current team
+		const descMatch = line.match(/^\s+description:\s*["']?(.+?)["']?\s*$/);
+		if (descMatch) {
+			teams[current].description = descMatch[1].trim();
+			continue;
+		}
+		// Any list item (- value) regardless of indentation → member
 		const itemMatch = line.match(/^\s+-\s+(.+)$/);
-		if (itemMatch && current) {
-			teams[current].push(itemMatch[1].trim());
+		if (itemMatch) {
+			teams[current].members.push(itemMatch[1].trim());
 		}
 	}
 	return teams;
@@ -172,9 +202,22 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
+	/**
+	 * Format a team select option.
+	 * Uses description if present; falls back to truncated member list.
+	 */
+	function teamSelectOption(name: string, def: TeamDef): string {
+		const prefix = `${name} — `;
+		if (def.description) return prefix + def.description;
+		// Fallback: member list, truncated to fit ~80 visible chars
+		const full = def.members.map(displayName).join(", ");
+		const max = 80 - prefix.length;
+		return prefix + (full.length > max ? full.slice(0, max - 1) + "…" : full);
+	}
+
 	function activateTeam(teamName: string) {
 		activeTeamName = teamName;
-		const members = teams[teamName] || [];
+		const members = (teams[teamName]?.members) || [];
 		const defsByName = new Map(allAgentDefs.map(d => [d.name.toLowerCase(), d]));
 
 		agentStates.clear();
@@ -572,10 +615,9 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			const options = teamNames.map(name => {
-				const members = teams[name].map(m => displayName(m));
-				return `${name} — ${members.join(", ")}`;
-			});
+			const options = teamNames.map(name =>
+				teamSelectOption(name, teams[name])
+			);
 
 			const choice = await ctx.ui.select("Select Team", options);
 			if (choice === undefined) return;
@@ -689,9 +731,17 @@ ${agentCatalog}`,
 
 		loadAgents(_ctx.cwd);
 
-		// Default to first team — use /agents-team to switch
+		// Boot-time team selection: show dialog when multiple teams exist,
+		// activate silently when there is only one.
 		const teamNames = Object.keys(teams);
-		if (teamNames.length > 0) {
+		if (teamNames.length > 1) {
+			const options = teamNames.map(name =>
+				teamSelectOption(name, teams[name] ?? { members: [], description: "" })
+			);
+			const choice = await _ctx.ui.select("Select Team", options);
+			const idx = choice !== undefined ? options.indexOf(choice) : 0;
+			activateTeam(teamNames[idx >= 0 ? idx : 0]);
+		} else if (teamNames.length === 1) {
 			activateTeam(teamNames[0]);
 		}
 
@@ -718,13 +768,11 @@ ${agentCatalog}`,
 				const model = _ctx.model?.id || "no-model";
 				const usage = _ctx.getContextUsage();
 				const pct = usage ? usage.percent : 0;
-				const filled = Math.round(pct / 10);
-				const bar = "#".repeat(filled) + "-".repeat(10 - filled);
 
 				const left = theme.fg("dim", ` ${model}`) +
 					theme.fg("muted", " · ") +
 					theme.fg("accent", activeTeamName);
-				const right = theme.fg("dim", `[${bar}] ${Math.round(pct)}% `);
+				const right = theme.fg("dim", `${contextBar(pct)} `);
 				const pad = " ".repeat(Math.max(1, width - visibleWidth(left) - visibleWidth(right)));
 
 				return [truncateToWidth(left + pad + right, width)];

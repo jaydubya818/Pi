@@ -1,4 +1,4 @@
-# Tier 2 — Pi CLI orchestration (v9–v12)
+# Tier 2 — Pi CLI orchestration (v9–v15)
 
 Playground-only: [`extensions/`](../../extensions/), [`.pi/agents/`](../../.pi/agents/), [`.pi/damage-control-rules.yaml`](../../.pi/damage-control-rules.yaml). Not the Ink control plane (`src/`).
 
@@ -8,6 +8,8 @@ Playground-only: [`extensions/`](../../extensions/), [`.pi/agents/`](../../.pi/a
 | v10 | System select (`/system` personas) | `npm run pi-tier:v10` | `just tier-v10` |
 | v11 | Damage control (tool intercept + rules) | `npm run pi-tier:v11` | `just tier-v11` |
 | v12 | Agent chain / pipeline | `npm run pi-tier:v12` | `just tier-v12` |
+| v14 | Guarded team (damage-control + agent-team) | `npm run pi-tier:v14` | `just tier-v14` |
+| v15 | Disciplined subagent (TillDone + subagent-widget) | `npm run pi-tier:v15` | `just tier-v15` |
 
 Automated config + policy smoke (no TUI): **`npm run verify-tier2`**
 
@@ -34,7 +36,7 @@ pi -e extensions/agent-chain.ts -e extensions/theme-cycler.ts
 
 **Switch teams**
 
-- At session start, a select dialog picks the active team.
+- At session start, a select dialog appears when multiple teams are defined; repos with only one team activate it silently.
 - During the session: command **`/agents-team`** — choose another team from the same YAML.
 - **`/agents-list`** — roster; **`/agents-grid N`** — dashboard columns.
 
@@ -69,10 +71,14 @@ pi -e extensions/agent-chain.ts -e extensions/theme-cycler.ts
 
 **Rule categories**
 
-- **`bashToolPatterns`** — regex on bash command; optional **`ask: true`** → confirm dialog instead of hard block.
+- **`bashToolPatterns`** — regex on bash command; optional **`ask: true`** → confirm dialog instead of hard block; optional **`dryRun: true`** → log match without blocking.
 - **`zeroAccessPaths`** — read/write/grep paths denied.
 - **`readOnlyPaths`** — writes/edits denied.
 - **`noDeletePaths`** — deletes denied.
+
+**Global dry-run mode:** Add `dryRun: true` at the top level of the YAML to run all rules in observe-only mode — violations are logged but not blocked. Remove or set false to enforce.
+
+**Audit log:** Every block/ask/dry-run decision is appended to `.pi/logs/damage-control-<timestamp>.jsonl` (one file per session, created automatically). Fields: `ts`, `sessionId`, `tool`, `input`, `rule`, `action`.
 
 **Customize:** Edit the YAML; reload by restarting Pi with the extension.
 
@@ -99,8 +105,8 @@ pi -e extensions/agent-chain.ts -e extensions/theme-cycler.ts
 
 **Switch chains**
 
-- Boot dialog selects active chain.
-- **`/chain`** — pick another; **`/chain-list`** — names and step counts.
+- At session start, a select dialog appears when multiple chains are defined; single-chain repos activate silently.
+- **`/chain`** — pick another during the session; **`/chain-list`** — names and step counts.
 
 **Manual proof**
 
@@ -111,7 +117,50 @@ pi -e extensions/agent-chain.ts -e extensions/theme-cycler.ts
 
 ---
 
+---
+
+## v14 — Guarded team (damage-control + agent-team)
+
+**What it is:** The realistic production pattern. `damage-control.ts` loads first and intercepts every tool call; `agent-team.ts` then runs the dispatcher model. All `dispatch_agent` invocations and any rule violations are written to the session audit log at `.pi/logs/damage-control-<ts>.jsonl`.
+
+**Usage:**
+```bash
+npm run pi-tier:v14
+# or
+just tier-v14
+```
+
+**Key difference from v9 (agent-team alone):** specialist agents can still run unrestricted tool calls internally — damage-control only audits the primary session. For full cross-session enforcement, load damage-control in the specialist agent definitions too.
+
+---
+
+## v15 — Disciplined subagent (TillDone + subagent-widget)
+
+**What it is:** `tilldone.ts` enforces task declaration before any tools run; `subagent-widget.ts` lets the primary agent delegate work to background Pi sessions via `/sub`. The parent must define at least one `tilldone` task before it can `/sub` anything out. Useful for showing structured async delegation with per-session context.
+
+**Usage:**
+```bash
+npm run pi-tier:v15
+# or
+just tier-v15
+```
+
+**Note on extension order:** `tilldone.ts` is loaded before `subagent-widget.ts` so that task discipline blocks apply before the sub command is available.
+
+---
+
+## When to use agent-chain vs agent-team
+
+`agent-chain` is for **linear, repeatable pipelines** — the same steps in the same order every time. It is simple to configure (YAML steps) and has low orchestration overhead.
+
+`agent-team` is for **adaptive, open-ended work** — the dispatcher decides which specialist to call based on the user's request. Use it when the workflow is not predetermined or when parallel delegation is needed.
+
+**Conditional branching is not supported natively in agent-chain.** If a chain step needs to skip, branch, or loop based on prior output, that logic must be either baked into the step's prompt template (`$INPUT` inspection) or the task should be moved to an `agent-team` flow where the dispatcher can route dynamically.
+
+---
+
 ## Limits
 
-- **Agent team / chain** spawn real Pi child processes; need API keys and a real terminal for full proof.
+- **Agent team / chain / v14 / v15** spawn real Pi child processes; need API keys and a real terminal for full proof.
 - **`verify-tier2`** checks YAML structure and damage-control regex only—not live TUI or `dispatch_agent` RPC.
+- **damage-control** in v14 audits the primary session only; child sessions spawned by `dispatch_agent` run with their own tool permissions unless they also load damage-control.

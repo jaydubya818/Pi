@@ -8,8 +8,9 @@
  * $ORIGINAL is always the user's original prompt.
  *
  * The primary Pi agent has NO codebase tools — it can ONLY kick off the
- * pipeline via the `run_chain` tool. On boot you select a chain; the
- * agent decides when to run it based on the user's prompt.
+ * pipeline via the `run_chain` tool. On boot a select dialog appears when
+ * multiple chains exist; single-chain repos activate silently. The agent
+ * decides when to run it based on the user's prompt.
  *
  * Agents maintain session context within a Pi session — re-running the
  * chain lets each agent resume where it left off.
@@ -28,6 +29,7 @@ import { spawn } from "child_process";
 import { readFileSync, existsSync, readdirSync, mkdirSync, unlinkSync } from "fs";
 import { join, resolve } from "path";
 import { applyExtensionDefaults } from "./themeMap.ts";
+import { contextBar } from "./formatters.ts";
 
 // ── Types ────────────────────────────────────────
 
@@ -60,6 +62,23 @@ interface StepState {
 
 function displayName(name: string): string {
 	return name.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+/**
+ * Format a chain select option.
+ * Uses description if present (truncated to ~80 chars); falls back to step flow.
+ */
+function chainSelectOption(c: ChainDef): string {
+	const prefix = `${c.name} — `;
+	if (c.description) {
+		const max = 80 - prefix.length;
+		const desc = c.description.length > max ? c.description.slice(0, max - 1) + "…" : c.description;
+		return prefix + desc;
+	}
+	// Fallback: step flow, truncated
+	const flow = c.steps.map(s => displayName(s.agent)).join(" → ");
+	const max = 80 - prefix.length;
+	return prefix + (flow.length > max ? flow.slice(0, max - 1) + "…" : flow);
 }
 
 // ── Chain YAML Parser ────────────────────────────
@@ -599,11 +618,7 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			const options = chains.map(c => {
-				const steps = c.steps.map(s => displayName(s.agent)).join(" → ");
-				const desc = c.description ? ` — ${c.description}` : "";
-				return `${c.name}${desc} (${steps})`;
-			});
+			const options = chains.map(c => chainSelectOption(c));
 
 			const choice = await ctx.ui.select("Select Chain", options);
 			if (choice === undefined) return;
@@ -755,8 +770,16 @@ ${agentCatalog}
 			return;
 		}
 
-		// Default to first chain — use /chain to switch
-		activateChain(chains[0]);
+		// Boot-time chain selection: show dialog when multiple chains exist,
+		// activate silently when there is only one.
+		if (chains.length > 1) {
+			const options = chains.map(c => chainSelectOption(c));
+			const choice = await _ctx.ui.select("Select Chain", options);
+			const idx = choice !== undefined ? options.indexOf(choice) : 0;
+			activateChain(chains[idx >= 0 ? idx : 0]);
+		} else {
+			activateChain(chains[0]);
+		}
 
 		// run_chain is registered as a tool — available alongside all default tools
 
@@ -777,8 +800,6 @@ ${agentCatalog}
 				const model = _ctx.model?.id || "no-model";
 				const usage = _ctx.getContextUsage();
 				const pct = usage ? usage.percent : 0;
-				const filled = Math.round(pct / 10);
-				const bar = "#".repeat(filled) + "-".repeat(10 - filled);
 
 				const chainLabel = activeChain
 					? theme.fg("accent", activeChain.name)
@@ -787,7 +808,7 @@ ${agentCatalog}
 				const left = theme.fg("dim", ` ${model}`) +
 					theme.fg("muted", " · ") +
 					chainLabel;
-				const right = theme.fg("dim", `[${bar}] ${Math.round(pct)}% `);
+				const right = theme.fg("dim", `${contextBar(pct)} `);
 				const pad = " ".repeat(Math.max(1, width - visibleWidth(left) - visibleWidth(right)));
 
 				return [truncateToWidth(left + pad + right, width)];

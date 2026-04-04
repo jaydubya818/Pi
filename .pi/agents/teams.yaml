@@ -1,41 +1,81 @@
-# Tier 2 orchestration: `default` = lean triad (boot default); `full` = alternate wide roster.
+# Tier 2 orchestration teams for agent-team.ts.
+# Each team may use the structured form (description + members) or the legacy
+# flat-list form (just a list of members). Both are supported.
+#
+#   structured:   teamName:\n  description: "..."\n  members:\n    - agent
+#   flat-list:    teamName:\n  - agent          (backward compat)
+
 default:
-  - planner
-  - builder
-  - reviewer
+  description: "Plan → Build → Review — lean triad for everyday tasks"
+  members:
+    - planner
+    - builder
+    - reviewer
 
 full:
-  - scout
-  - planner
-  - builder
-  - reviewer
-  - documenter
-  - red-team
+  description: "Full pipeline — scout, plan, build, review, document, red-team"
+  members:
+    - scout
+    - planner
+    - builder
+    - reviewer
+    - documenter
+    - red-team
 
 plan-build:
-  - planner
-  - builder
-  - reviewer
+  description: "Plan then build — two-step implementation, skip formal review"
+  members:
+    - planner
+    - builder
+    - reviewer
 
 info:
-  - scout
-  - documenter
-  - reviewer
+  description: "Research & document — scout + docs, no coding"
+  members:
+    - scout
+    - documenter
+    - reviewer
 
 frontend:
-  - planner
-  - builder
-  - bowser
+  description: "Frontend focus — plan, build, Bowser browser checks"
+  members:
+    - planner
+    - builder
+    - bowser
 
-# Tier 3 meta-agent (Pi Pi): experts under .pi/agents/pi-pi/ — primary loads all *.md except pi-orchestrator.md
+security:
+  description: "Adversarial review — red-team finds vulns, reviewer audits"
+  members:
+    - red-team
+    - reviewer
+
+browser:
+  description: "Playwright automation — Bowser drives, builder implements"
+  members:
+    - bowser
+    - builder
+
+test:
+  description: "Quality gate — tester validates, reviewer confirms"
+  members:
+    - tester
+    - reviewer
+
+# Tier 3 meta-agent: experts live under .pi/agents/pi-pi/
+# pi-pi extension loads these automatically; not for direct dispatch.
 pi-pi:
-  - prompt-expert
-  - ext-expert
-  - theme-expert
-  - tui-expert
-  - teams-chains-expert
-  - safety-expert
-  - docs-expert
-  - skill-expert
-  - config-expert
-  - agent-expert
+  description: "Pi Pi meta-agent — builds Pi extensions/agents via expert panel"
+  members:
+    - prompt-expert
+    - ext-expert
+    - theme-expert
+    - tui-expert
+    - teams-chains-expert
+    - safety-expert
+    - docs-expert
+    - skill-expert
+    - config-expert
+    - agent-expert
+    - cli-expert
+    - keybinding-expert
+    - test-expert

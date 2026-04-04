@@ -9,6 +9,11 @@
  *   catppuccin-mocha · cyberpunk · dracula · everforest · gruvbox
  *   midnight-ocean   · nord      · ocean-breeze · rose-pine
  *   synthwave        · tokyo-night
+ *
+ * Per-extension env var override:
+ *   PI_<EXTNAME_UPPER>_THEME=<theme-name>
+ *   Example: PI_MINIMAL_THEME=dracula   PI_AGENT_TEAM_THEME=cyberpunk
+ *   Dashes in extension names become underscores: agent-chain → PI_AGENT_CHAIN_THEME
  */
 
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
@@ -71,8 +76,11 @@ export function applyExtensionTheme(fileUrl: string, ctx: ExtensionContext): boo
 		return true; // Pretend we succeeded, but don't overwrite the primary theme
 	}
 
-	let themeName = THEME_MAP[name];
-	
+	// Per-extension env var override: PI_<EXTNAME_UPPER>_THEME=<theme-name>
+	// Example: PI_MINIMAL_THEME=dracula  PI_AGENT_TEAM_THEME=cyberpunk
+	const envKey = `PI_${name.toUpperCase().replace(/-/g, "_")}_THEME`;
+	let themeName = process.env[envKey] || THEME_MAP[name];
+
 	if (!themeName) {
 		themeName = "synthwave";
 	}

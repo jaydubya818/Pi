@@ -27,14 +27,23 @@ pi -e extensions/pi-pi.ts -e extensions/theme-cycler.ts
 
 **Dry-run / asset check (no API):** `npm run verify-tier3`
 
-## Minimum expert coverage
+## Expert roster
 
-- **prompt-expert** — prompts / system text  
-- **ext-expert** — extensions API  
-- **theme-expert** + **tui-expert** — themes & widgets  
-- **teams-chains-expert** + **agent-expert** — teams / chains / personas  
-- **safety-expert** — damage-control YAML  
-- **docs-expert** — README & playground docs  
+Pi Pi uses **13 domain experts**. The orchestrator queries the relevant experts in parallel, then writes the implementation itself.
+
+- **agent-expert** — agents, frontmatter, tool selection, teams, orchestration patterns  
+- **cli-expert** — `pi` CLI flags, modes, sessions, models, automation  
+- **config-expert** — `settings.json`, providers, models, UI settings, packages  
+- **docs-expert** — README, tier docs, examples, doc conventions  
+- **ext-expert** — extensions, tools, hooks, commands, runtime behavior  
+- **keybinding-expert** — shortcuts, remaps, conflicts, terminal compatibility  
+- **prompt-expert** — prompt templates, arguments, discovery, `/template` workflows  
+- **safety-expert** — damage-control rules, bash patterns, protected paths  
+- **skill-expert** — skills, `SKILL.md`, structure, discovery, invocation  
+- **teams-chains-expert** — `teams.yaml`, `agent-chain.yaml`, delegation, pipelines  
+- **test-expert** — validation, stack-load checks, verify scripts  
+- **theme-expert** — theme JSON, token coverage, palettes, hot reload  
+- **tui-expert** — TUI components, overlays, widgets, rendering, input handling  
 
 ## Example workflows
 

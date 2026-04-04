@@ -54,7 +54,11 @@
     "pi-tier:v10": "env PI_PLAYGROUND_LABEL='pi-tier v10 · system select' pi -e extensions/playground-boot.ts -e extensions/system-select.ts -e extensions/minimal.ts -e extensions/theme-cycler.ts",
     "pi-tier:v11": "env PI_PLAYGROUND_LABEL='pi-tier v11 · damage control' pi -e extensions/playground-boot.ts -e extensions/damage-control.ts -e extensions/minimal.ts -e extensions/theme-cycler.ts",
     "pi-tier:v12": "env PI_PLAYGROUND_LABEL='pi-tier v12 · agent chain' pi -e extensions/playground-boot.ts -e extensions/agent-chain.ts -e extensions/theme-cycler.ts",
-    "pi-tier:v13": "env PI_PLAYGROUND_LABEL='pi-tier v13 · Pi Pi meta' pi -e extensions/playground-boot.ts -e extensions/pi-pi.ts -e extensions/theme-cycler.ts"
+    "pi-tier:v13": "env PI_PLAYGROUND_LABEL='pi-tier v13 · Pi Pi meta' pi -e extensions/playground-boot.ts -e extensions/pi-pi.ts -e extensions/theme-cycler.ts",
+    "pi-tier:v14": "env PI_PLAYGROUND_LABEL='pi-tier v14 · guarded team' pi -e extensions/playground-boot.ts -e extensions/damage-control.ts -e extensions/agent-team.ts -e extensions/theme-cycler.ts",
+    "pi-tier:v15": "env PI_PLAYGROUND_LABEL='pi-tier v15 · subagent + TillDone' pi -e extensions/playground-boot.ts -e extensions/tilldone.ts -e extensions/subagent-widget.ts -e extensions/theme-cycler.ts",
+    "pi-play:guarded-team": "env PI_PLAYGROUND_LABEL='pi-play · guarded team' pi -e extensions/playground-boot.ts -e extensions/damage-control.ts -e extensions/agent-team.ts -e extensions/theme-cycler.ts",
+    "pi-play:disciplined-subagent": "env PI_PLAYGROUND_LABEL='pi-play · disciplined subagent' pi -e extensions/playground-boot.ts -e extensions/tilldone.ts -e extensions/subagent-widget.ts -e extensions/theme-cycler.ts"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "^0.65.0",

@@ -8,6 +8,12 @@
  * Each expert fetches fresh Pi documentation via firecrawl on first query.
  * Experts are read-only researchers. The primary agent is the only writer.
  *
+ * Expert response cache:
+ *   Responses are cached at ~/.pi/cache/pi-docs/ with a 24h TTL to avoid
+ *   repeated LLM calls for the same question. Override TTL:
+ *     PI_PI_CACHE_TTL_HOURS=0   — disable cache entirely
+ *     PI_PI_CACHE_TTL_HOURS=48  — extend to 48h
+ *
  * Commands:
  *   /experts          — list available experts and their status
  *   /experts-grid N   — set dashboard column count (default 3)
@@ -19,9 +25,57 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { Text, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { spawn } from "child_process";
-import { readdirSync, readFileSync, existsSync, mkdirSync } from "fs";
+import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { createHash } from "crypto";
 import { join, resolve } from "path";
+import * as os from "os";
 import { applyExtensionDefaults } from "./themeMap.ts";
+import { contextBar } from "./formatters.ts";
+
+// ── Expert response cache ─────────────────────────────────────────────────────
+// Caches the text output of each expert query to avoid repeated LLM calls for
+// the same question in a session or across sessions.
+// Location: ~/.pi/cache/pi-docs/
+// TTL: 24 hours (configurable via PI_PI_CACHE_TTL_HOURS env var)
+// To bypass the cache for a single session: PI_PI_CACHE_TTL_HOURS=0
+const CACHE_TTL_MS = (Number(process.env.PI_PI_CACHE_TTL_HOURS ?? "24") || 0) * 60 * 60 * 1000;
+const CACHE_DIR = join(os.homedir(), ".pi", "cache", "pi-docs");
+
+interface CacheEntry {
+	ts: number;
+	expertName: string;
+	question: string;
+	output: string;
+}
+
+function cacheKey(expertName: string, question: string): string {
+	const hash = createHash("sha1").update(`${expertName}\n${question}`).digest("hex").slice(0, 12);
+	return join(CACHE_DIR, `${expertName}-${hash}.json`);
+}
+
+function readCache(expertName: string, question: string): string | null {
+	if (CACHE_TTL_MS === 0) return null;
+	try {
+		const p = cacheKey(expertName, question);
+		if (!existsSync(p)) return null;
+		const entry: CacheEntry = JSON.parse(readFileSync(p, "utf-8"));
+		if (Date.now() - entry.ts > CACHE_TTL_MS) return null;
+		return entry.output;
+	} catch {
+		return null;
+	}
+}
+
+function writeCache(expertName: string, question: string, output: string): void {
+	if (CACHE_TTL_MS === 0) return;
+	try {
+		mkdirSync(CACHE_DIR, { recursive: true });
+		const entry: CacheEntry = { ts: Date.now(), expertName, question, output };
+		writeFileSync(cacheKey(expertName, question), JSON.stringify(entry));
+	} catch {
+		// Non-fatal: cache write failures are ignored
+	}
+}
 
 // ── Types ────────────────────────────────────────
 
@@ -262,6 +316,22 @@ export default function (pi: ExtensionAPI) {
 			});
 		}
 
+		// Check cache before spawning an LLM subprocess
+		const cached = readCache(state.def.name, question);
+		if (cached) {
+			state.status = "done";
+			state.question = question;
+			state.elapsed = 0;
+			state.lastLine = "(cached)";
+			state.queryCount++;
+			updateWidget();
+			ctx.ui.notify(
+				`${displayName(state.def.name)} answered from cache`,
+				"success",
+			);
+			return Promise.resolve({ output: cached, exitCode: 0, elapsed: 0 });
+		}
+
 		state.status = "researching";
 		state.question = question;
 		state.elapsed = 0;
@@ -350,6 +420,11 @@ export default function (pi: ExtensionAPI) {
 					`${displayName(state.def.name)} ${state.status} in ${Math.round(state.elapsed / 1000)}s`,
 					state.status === "done" ? "success" : "error"
 				);
+
+				// Cache successful responses for TTL_MS
+				if (code === 0 && full) {
+					writeCache(state.def.name, question, full);
+				}
 
 				resolve({
 					output: full,
@@ -595,13 +670,17 @@ Ask specific questions about what you need to BUILD. Each expert returns pattern
 		loadExperts(_ctx.cwd);
 		updateWidget();
 
-		const expertNames = Array.from(experts.values()).map(s => displayName(s.def.name)).join(", ");
+		const allNames = Array.from(experts.values()).map(s => displayName(s.def.name));
+		// Show first 3 names + "… and N more" so the notify stays scannable
+		const previewCount = 3;
+		const preview = allNames.slice(0, previewCount).join(", ");
+		const remaining = allNames.length - previewCount;
+		const expertSummary = remaining > 0 ? `${preview} … and ${remaining} more` : preview;
 		_ctx.ui.setStatus("pi-pi", `Pi Pi (${experts.size} experts)`);
 		_ctx.ui.notify(
-			`Pi Pi loaded — ${experts.size} experts: ${expertNames}\n\n` +
-			`/experts          List experts and status\n` +
-			`/experts-grid N   Set grid columns (1-5)\n\n` +
-			`Ask me to build any Pi agent component!`,
+			`Pi Pi loaded — ${experts.size} experts: ${expertSummary}\n` +
+			`/experts to list all · /experts-grid N to resize panel\n\n` +
+			`Try: "build an extension that shows token usage in the footer"`,
 			"info",
 		);
 
@@ -613,8 +692,6 @@ Ask specific questions about what you need to BUILD. Each expert returns pattern
 				const model = _ctx.model?.id || "no-model";
 				const usage = _ctx.getContextUsage();
 				const pct = usage ? usage.percent : 0;
-				const filled = Math.round(pct / 10);
-				const bar = "#".repeat(filled) + "-".repeat(10 - filled);
 
 				const active = Array.from(experts.values()).filter(e => e.status === "researching").length;
 				const done = Array.from(experts.values()).filter(e => e.status === "done").length;
@@ -627,7 +704,7 @@ Ask specific questions about what you need to BUILD. Each expert returns pattern
 					: done > 0
 					? theme.fg("success", ` ✓ ${done} done`)
 					: "";
-				const right = theme.fg("dim", `[${bar}] ${Math.round(pct)}% `);
+				const right = theme.fg("dim", `${contextBar(pct)} `);
 				const pad = " ".repeat(Math.max(1, width - visibleWidth(left) - visibleWidth(mid) - visibleWidth(right)));
 
 				return [truncateToWidth(left + mid + pad + right, width)];

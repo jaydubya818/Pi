@@ -2,6 +2,18 @@
 
 **Faithful local recreation of a multi-tier agent architecture using public Pi (`@mariozechner/pi-coding-agent`) capabilities.** This is not the private “video” codebase; it is a sibling control plane that composes multiple real `AgentSession` instances with YAML config, policy-mediation, contracts, and session artifacts.
 
+> [!TIP]
+> ## First time here? Start with this
+> If you just want the fastest low-friction intro:
+>
+> - **No keys / no `pi` yet:** run `npm install` then `PI_MOCK=1 npm run demo`
+> - **Try the supervised multi-agent app:** run `npm run check-env` then `PI_MOCK=1 npm run start`
+> - **Try the Pi playground tiers:** only after `pi` is installed and on your `PATH`, run `npm run pi-tier:v1`
+>
+> Rule of thumb:
+> - **`src/` / `npm run start`** = the control-plane app
+> - **`extensions/` / `npm run pi-tier:v*`** = the Pi playground
+
 ## Current Capability Snapshot
 
 - **Control plane** — Operator-grade, **supervised** local multi-agent Ink app: YAML teams, mediated tools, policy gates, contracts, session artifacts under `.runtime/sessions/`. Implemented in `src/` + [`config/multi-team.yaml`](config/multi-team.yaml).
@@ -196,7 +208,7 @@ One-page operator reference: **tier → extension → supporting files → launc
 
 | Tier / Variant | Extension(s) | Supporting Files | Launch Command | Purpose |
 |----------------|-------------|-----------------|----------------|---------|
-| **v13** Pi Pi | `pi-pi.ts` | `.pi/agents/pi-pi/pi-orchestrator.md`, `.pi/agents/pi-pi/*.md` (12 experts), `docs/pi-playground/TIER3-META-AGENT.md` | `npm run pi-tier:v13` (`just tier-v13`) | Meta-agent that builds Pi components; primary agent fans out to parallel read-only experts via `query_experts`, then synthesizes and writes files |
+| **v13** Pi Pi | `pi-pi.ts` | `.pi/agents/pi-pi/pi-orchestrator.md`, `.pi/agents/pi-pi/*.md` (13 experts), `docs/pi-playground/TIER3-META-AGENT.md` | `npm run pi-tier:v13` (`just tier-v13`) | Meta-agent that builds Pi components; primary agent fans out to parallel read-only experts via `query_experts`, then synthesizes and writes files |
 
 ---
 
@@ -262,6 +274,24 @@ YAML smoke (no TUI): **`npm run verify-tier2`**.
 ## Meta-Agent
 
 **Tier 13** — Pi Pi meta-orchestrator, expert markdown under [`.pi/agents/pi-pi/`](.pi/agents/pi-pi/), `query_experts`. Doc: [docs/pi-playground/TIER3-META-AGENT.md](docs/pi-playground/TIER3-META-AGENT.md). Examples: [`examples/meta-agent/`](examples/meta-agent/).
+
+Pi Pi queries **13 domain experts in parallel** for research, then synthesizes the findings and writes the actual implementation.
+
+| Expert | Purpose |
+|--------|---------|
+| Agent Expert | Defines Pi agents, frontmatter, tool selection, teams, and orchestration patterns. |
+| CLI Expert | Covers `pi` command-line usage, flags, modes, sessions, models, and automation. |
+| Config Expert | Handles `settings.json`, providers, models, UI settings, packages, and keybinding config. |
+| Docs Expert | Maintains repo docs, tier guides, examples, and documentation conventions. |
+| Extensions Expert | Builds Pi extensions, custom tools, hooks, commands, UI integration, and runtime behavior. |
+| Keybinding Expert | Handles shortcut registration, key formats, remapping, conflicts, and terminal compatibility. |
+| Prompt Expert | Designs prompt templates, frontmatter, argument syntax, discovery, and `/template` workflows. |
+| Safety Expert | Defines damage-control rules for risky tool calls, shell patterns, and protected paths. |
+| Skill Expert | Designs and validates skills, `SKILL.md`, discovery, structure, and invocation. |
+| Teams & Chains Expert | Designs `teams.yaml`, `agent-chain.yaml`, delegation, pipelines, and multi-agent flow. |
+| Test Expert | Validates extensions, themes, YAML configs, stack loading, and repo verify scripts. |
+| Theme Expert | Creates and validates Pi themes, token coverage, palettes, and hot-reload behavior. |
+| TUI Expert | Builds terminal UI components, overlays, widgets, rendering, and input handling. |
 
 | Launch | `npm run pi-tier:v13` / `npm run pi-play:pi-pi` / `just tier-v13` / `just ext-pi-pi` |
 | Dry-run | `npm run verify-tier3` |

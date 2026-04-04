@@ -1,3 +1,19 @@
+# Damage-Control rules for extensions/damage-control.ts
+#
+# Top-level options:
+#   dryRun: true   — observe-only mode: log ALL matches without blocking.
+#                    Useful for tuning rules before enforcing them.
+#                    Remove or set false to enforce rules.
+#
+# Per-rule options (bashToolPatterns):
+#   ask: true      — show a confirmation dialog instead of hard-blocking.
+#   dryRun: true   — log this match without blocking (rule-level override).
+#
+# Audit log: written to .pi/logs/damage-control-<timestamp>.jsonl per session.
+#
+# Example dryRun mode (uncomment to enable globally):
+# dryRun: true
+
 bashToolPatterns:
   - pattern: '\brm\s+(-[^\s]*)*-[rRf]'
     reason: rm with recursive or force flags

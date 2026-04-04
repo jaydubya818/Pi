@@ -3,6 +3,29 @@ set dotenv-load := true
 default:
     @just --list
 
+# Sync vendor/pi-vs-claude-code/ from docs/pi-vs-claude-code/.
+# Run this after updating the docs mirror (extensions, specs, README, THEME.md).
+# The vendor copy is a pinned snapshot; it is NOT auto-synced on build.
+# When to run: after merging upstream pi-vs-cc changes into docs/pi-vs-claude-code/.
+sync-vendor:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SRC="{{justfile_directory()}}/docs/pi-vs-claude-code"
+    DST="{{justfile_directory()}}/vendor/pi-vs-claude-code"
+    if [ ! -d "$SRC" ]; then echo "Source not found: $SRC"; exit 1; fi
+    rsync -av --delete \
+        --exclude='node_modules' \
+        --exclude='.git' \
+        "$SRC/" "$DST/"
+    echo "vendor/pi-vs-claude-code synced from docs/pi-vs-claude-code"
+
+# Remove the stale .pi/settings.json.lock directory that pi leaves behind when a
+# previous session did not exit cleanly.  Safe to run at any time; pi recreates
+# the lock on next launch.  Fixes repeated EPERM warnings on startup.
+clean-pi-lock:
+    rm -rf .pi/settings.json.lock
+    @echo ".pi/settings.json.lock removed"
+
 # Repo checks (no Pi TUI): typecheck + lint + unit tests + YAML/meta dry-runs + pi stacks if pi on PATH
 verify:
     npm run check
@@ -129,6 +152,24 @@ tier-v12:
 
 tier-v13:
     pi -e extensions/pi-pi.ts -e extensions/theme-cycler.ts
+
+# Tier 2+ composite patterns (v14–v15) — guarded multi-agent and disciplined delegation
+
+# v14. Guarded team: damage-control safety layer + agent-team dispatcher
+# Realistic production pattern: all team dispatch is audited and rule-enforced.
+ext-guarded-team:
+    pi -e extensions/damage-control.ts -e extensions/agent-team.ts -e extensions/theme-cycler.ts
+
+tier-v14:
+    pi -e extensions/damage-control.ts -e extensions/agent-team.ts -e extensions/theme-cycler.ts
+
+# v15. Disciplined subagent: TillDone task discipline + subagent-widget async delegation
+# Parent must define tasks before delegating; each /sub inherits the task-driven workflow.
+ext-disciplined-subagent:
+    pi -e extensions/tilldone.ts -e extensions/subagent-widget.ts -e extensions/theme-cycler.ts
+
+tier-v15:
+    pi -e extensions/tilldone.ts -e extensions/subagent-widget.ts -e extensions/theme-cycler.ts
 
 # utils
 

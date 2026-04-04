@@ -8,6 +8,7 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { applyExtensionDefaults } from "./themeMap.ts";
+import { contextBar } from "./formatters.ts";
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 
 export default function (pi: ExtensionAPI) {
@@ -20,11 +21,9 @@ export default function (pi: ExtensionAPI) {
 				const model = ctx.model?.id || "no-model";
 				const usage = ctx.getContextUsage();
 				const pct = (usage && usage.percent !== null) ? usage.percent : 0;
-				const filled = Math.round(pct / 10);
-				const bar = "#".repeat(filled) + "-".repeat(10 - filled);
 
 				const left = theme.fg("dim", ` ${model}`);
-				const right = theme.fg("dim", `[${bar}] ${Math.round(pct)}% `);
+				const right = theme.fg("dim", `${contextBar(pct)} `);
 				const pad = " ".repeat(Math.max(1, width - visibleWidth(left) - visibleWidth(right)));
 
 				return [truncateToWidth(left + pad + right, width)];

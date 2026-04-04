@@ -57,7 +57,13 @@ async function cmdCheckEnv(): Promise<void> {
 		try {
 			await execa("which", [bin]);
 		} catch {
-			issues.push(`${bin} not on PATH (optional for some flows)`);
+			if (bin === "pi") {
+				issues.push(
+					`pi not on PATH — fix: export PATH="$PWD/node_modules/.bin:$PATH"  or use ./node_modules/.bin/pi directly`,
+				);
+			} else {
+				issues.push(`${bin} not on PATH (optional for some flows)`);
+			}
 		}
 	}
 	const mono =
@@ -166,7 +172,7 @@ function ChatApp(props: {
 		makeMessage(
 			"system",
 			"system",
-			"After each turn this app prints session → <path> under .runtime/sessions/  ·  npm run inspect-session -- <that-path>  ·  Non-interactive smoke: PI_MOCK=1 npm run demo",
+			"After each turn: session → .runtime/sessions/<id>  ·  npm run replay -- <path> --dump  (human-readable)  ·  npm run inspect-session -- <path>  (raw last-20 events)  ·  Smoke: PI_MOCK=1 npm run demo",
 		),
 	]);
 	const [buf, setBuf] = useState("");
@@ -633,7 +639,18 @@ async function cmdPolicyCheck(): Promise<void> {
 	const cfg = await loadConfig();
 	const repoRoot = resolve(PROJECT_ROOT, cfg.app.repo_root);
 	const tmp = join(PROJECT_ROOT, ".runtime", "policy-check");
-	await fs.remove(tmp);
+	// Clean up stale artifacts from a previous run.  On some sandboxed or
+	// network-mounted filesystems the rmdir/unlink inside fs.remove() can
+	// fail with EPERM even though the subsequent writes succeed.  Treat that
+	// as a non-fatal warning and continue — the test itself is authoritative.
+	try {
+		await fs.remove(tmp);
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		console.warn(
+			`policy-check: could not clean previous run (${msg}) — continuing`,
+		);
+	}
 	await fs.ensureDir(tmp);
 	const allowDir = join(tmp, "allow");
 	const denyDir = join(tmp, "deny");
@@ -642,10 +659,12 @@ async function cmdPolicyCheck(): Promise<void> {
 	const secret = join(tmp, ".env");
 	await fs.writeFile(secret, "x=1\n");
 	const symlink = join(allowDir, "escape-link");
+	let symlinkSupported = false;
 	try {
 		await fs.symlink(denyDir, symlink);
+		symlinkSupported = true;
 	} catch {
-		/* symlink may fail on some hosts */
+		/* symlinks unsupported on this host — deny_symlink_escape will be skipped */
 	}
 	const p = new PolicyEngine(
 		cfg,
@@ -656,15 +675,21 @@ async function cmdPolicyCheck(): Promise<void> {
 		"worker",
 		{ filesTouched: new Set<string>(), approxLinesChanged: 0 },
 	);
-	const checks = [
+	const checks: Array<[string, boolean]> = [
 		["allow_write", p.checkWrite(join(allowDir, "ok.txt")) === null],
 		["deny_delete_outside", p.checkDelete(join(denyDir, "nope.txt")) !== null],
 		["deny_secret_delete", p.checkDelete(secret) !== null],
-		[
+	];
+	if (symlinkSupported) {
+		checks.push([
 			"deny_symlink_escape",
 			p.checkWrite(join(symlink, "should-block.txt")) !== null,
-		],
-	];
+		]);
+	} else {
+		console.warn(
+			"policy-check: symlinks not supported on this host — deny_symlink_escape skipped",
+		);
+	}
 	const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
 	if (failed.length) {
 		console.error(`policy-check failed: ${failed.join(", ")}`);
