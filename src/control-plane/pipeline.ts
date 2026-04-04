@@ -12,6 +12,7 @@ import { runAgentTurn } from "../agents/run-agent.js";
 import type { RunAgentParams } from "../agents/run-agent.js";
 import { PROJECT_ROOT, resolveFromRoot } from "../app/config-loader.js";
 import {
+	ensureSessionGitBaseline,
 	ensureSessionGitBranch,
 	writeSessionArtifacts,
 } from "../git/session-git.js";
@@ -95,40 +96,43 @@ async function runWithReliability(
 		const controller = new AbortController();
 		const startedAt = Date.now();
 		let timedOut = false;
+		let timeoutHandle: NodeJS.Timeout | null = null;
 		const runPromise = runAgentTurnSafe(session, {
 			...params,
 			abortSignal: controller.signal,
 		});
-		try {
-			const result = await Promise.race([
-				runPromise,
-				(async () => {
-					await sleep(timeoutMs);
-					timedOut = true;
-					controller.abort();
-					onStatus?.("timeout");
-					await session.emit({
-						correlation_id: session.correlationBase,
-						event_type: "agent_timeout",
-						agent: params.agentName,
-						parent_agent: params.parentAgent,
-						team: params.team,
-						payload: { timeout_ms: timeoutMs, attempt },
-					});
-					await session.emit({
-						correlation_id: session.correlationBase,
-						event_type: "agent_abandoned",
-						agent: params.agentName,
-						parent_agent: params.parentAgent,
-						team: params.team,
-						payload: { reason: "timeout", timeout_ms: timeoutMs, attempt },
-					});
-					onStatus?.("abandoned");
-					throw new AgentTimeoutError(
+		const timeoutPromise = new Promise<never>((_resolve, reject) => {
+			timeoutHandle = setTimeout(() => {
+				timedOut = true;
+				controller.abort();
+				onStatus?.("timeout");
+				void session.emit({
+					correlation_id: session.correlationBase,
+					event_type: "agent_timeout",
+					agent: params.agentName,
+					parent_agent: params.parentAgent,
+					team: params.team,
+					payload: { timeout_ms: timeoutMs, attempt },
+				});
+				void session.emit({
+					correlation_id: session.correlationBase,
+					event_type: "agent_abandoned",
+					agent: params.agentName,
+					parent_agent: params.parentAgent,
+					team: params.team,
+					payload: { reason: "timeout", timeout_ms: timeoutMs, attempt },
+				});
+				onStatus?.("abandoned");
+				reject(
+					new AgentTimeoutError(
 						`Agent ${params.agentName} timed out after ${timeoutMs}ms`,
-					);
-				})(),
-			]);
+					),
+				);
+			}, timeoutMs);
+			timeoutHandle.unref?.();
+		});
+		try {
+			const result = await Promise.race([runPromise, timeoutPromise]);
 			return result;
 		} catch (e) {
 			if (timedOut) {
@@ -175,6 +179,8 @@ async function runWithReliability(
 			if (!canRetry) throw e;
 			attempt += 1;
 			await sleep(400 * attempt);
+		} finally {
+			if (timeoutHandle) clearTimeout(timeoutHandle);
 		}
 	}
 }
@@ -294,6 +300,7 @@ export async function runUserMessage(opts: {
 	const timeoutMs = cfg.app.default_timeout_ms ?? 900_000;
 
 	await ensureSessionGitBranch({ cfg, repoRoot, session });
+	await ensureSessionGitBaseline({ repoRoot, session });
 
 	resetSessionApprovals();
 	if (opts.approvalAutoAccept) setSessionAutoApproveForTests(true);

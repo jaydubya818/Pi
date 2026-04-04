@@ -29,8 +29,8 @@ export class TurnCancelledError extends Error {
 	}
 }
 
-let sessionAutoApprove = false;
 let uiNotifier: (() => void) | null = null;
+const sessionAutoApprove = new Set<string>();
 
 type Pending = {
 	req: RichApprovalRequest;
@@ -39,23 +39,29 @@ type Pending = {
 	session: SessionContext;
 };
 
-let pending: Pending | null = null;
+const pendingQueue: Pending[] = [];
 
 export function setApprovalUiNotifier(fn: (() => void) | null): void {
 	uiNotifier = fn;
 }
 
 export function resetSessionApprovals(): void {
-	sessionAutoApprove = false;
+	sessionAutoApprove.clear();
 }
 
 export function setSessionAutoApproveForTests(v: boolean): void {
-	sessionAutoApprove = v;
+	if (v) sessionAutoApprove.add("*");
+	else sessionAutoApprove.clear();
+}
+
+function isSessionAutoApproved(sessionId: string): boolean {
+	return sessionAutoApprove.has("*") || sessionAutoApprove.has(sessionId);
 }
 
 export function getActiveApproval():
 	| (RichApprovalRequest & { correlationId: string })
 	| null {
+	const pending = pendingQueue[0];
 	if (!pending) return null;
 	return { ...pending.req, correlationId: pending.correlationId };
 }
@@ -64,7 +70,7 @@ export async function waitForApproval(opts: {
 	session: SessionContext;
 	req: RichApprovalRequest;
 }): Promise<ApprovalOutcome> {
-	if (sessionAutoApprove) return { allowed: true };
+	if (isSessionAutoApproved(opts.session.sessionId)) return { allowed: true };
 	const correlationId = newCorrelationId();
 	await opts.session.emit({
 		correlation_id: correlationId,
@@ -82,7 +88,12 @@ export async function waitForApproval(opts: {
 		},
 	});
 	return new Promise((resolve) => {
-		pending = { req: opts.req, correlationId, resolve, session: opts.session };
+		pendingQueue.push({
+			req: opts.req,
+			correlationId,
+			resolve,
+			session: opts.session,
+		});
 		uiNotifier?.();
 	});
 }
@@ -90,15 +101,15 @@ export async function waitForApproval(opts: {
 export async function submitApprovalDecision(
 	decision: ApprovalDecision,
 ): Promise<void> {
+	const pending = pendingQueue.shift();
 	if (!pending) return;
 	const { req, correlationId, resolve, session } = pending;
-	pending = null;
 	uiNotifier?.();
 
 	let outcome: ApprovalOutcome;
 	if (decision === "approve_once") outcome = { allowed: true };
 	else if (decision === "approve_session") {
-		sessionAutoApprove = true;
+		sessionAutoApprove.add(session.sessionId);
 		outcome = { allowed: true };
 	} else if (decision === "deny") outcome = { allowed: false, denied: true };
 	else outcome = { allowed: false, cancelTurn: true };

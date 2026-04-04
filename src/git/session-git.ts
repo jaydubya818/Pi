@@ -1,9 +1,20 @@
+import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
+import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { execa } from "execa";
 import fs from "fs-extra";
 import type { Multi_teamConfig } from "../models/config-schema.js";
 import type { SessionContext } from "../sessions/session-context.js";
+
+const GIT_BASELINE_FILE = ".git-baseline.json";
+const DELETED_HASH = "__deleted__";
+
+type GitBaseline = {
+	repoRoot: string;
+	captured_at: string;
+	files: Record<string, string>;
+};
 
 async function readViolationsFromEvents(
 	eventsPath: string,
@@ -183,31 +194,149 @@ async function readArtifactAuditFromEvents(
 	};
 }
 
+async function listDirtyTrackedFiles(repoRoot: string): Promise<string[]> {
+	const result = await execa("git", ["diff", "--name-only", "HEAD"], {
+		cwd: repoRoot,
+		reject: false,
+	});
+	return result.stdout
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean);
+}
+
+async function listUntrackedFiles(repoRoot: string): Promise<string[]> {
+	const result = await execa(
+		"git",
+		["ls-files", "--others", "--exclude-standard"],
+		{
+			cwd: repoRoot,
+			reject: false,
+		},
+	);
+	return result.stdout
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean);
+}
+
+async function hashRepoFile(
+	repoRoot: string,
+	relPath: string,
+): Promise<string> {
+	const absPath = resolve(repoRoot, relPath);
+	if (!(await fs.pathExists(absPath))) return DELETED_HASH;
+	const stat = await fs.stat(absPath);
+	if (!stat.isFile()) return `__nonfile__:${stat.mode}`;
+	const data = await fs.readFile(absPath);
+	return createHash("sha256").update(data).digest("hex");
+}
+
+async function snapshotDirtyState(
+	repoRoot: string,
+): Promise<Record<string, string>> {
+	const files = new Set<string>([
+		...(await listDirtyTrackedFiles(repoRoot)),
+		...(await listUntrackedFiles(repoRoot)),
+	]);
+	const out: Record<string, string> = {};
+	for (const relPath of [...files].sort()) {
+		out[relPath] = await hashRepoFile(repoRoot, relPath);
+	}
+	return out;
+}
+
+async function readGitBaseline(
+	session: SessionContext,
+): Promise<GitBaseline | null> {
+	const path = session.path(GIT_BASELINE_FILE);
+	if (!(await fs.pathExists(path))) return null;
+	return (await fs.readJson(path)) as GitBaseline;
+}
+
+export async function ensureSessionGitBaseline(opts: {
+	repoRoot: string;
+	session: SessionContext;
+}): Promise<void> {
+	if (await fs.pathExists(opts.session.path(GIT_BASELINE_FILE))) return;
+	const baseline: GitBaseline = {
+		repoRoot: opts.repoRoot,
+		captured_at: new Date().toISOString(),
+		files: await snapshotDirtyState(opts.repoRoot),
+	};
+	await fs.writeJson(opts.session.path(GIT_BASELINE_FILE), baseline, {
+		spaces: 2,
+	});
+}
+
+async function computeSessionScopedDiff(opts: {
+	repoRoot: string;
+	session: SessionContext;
+}): Promise<{
+	files: string[];
+	patch: string;
+	preexisting_files: string[];
+	current_dirty_files: string[];
+}> {
+	const baseline = await readGitBaseline(opts.session);
+	const current = await snapshotDirtyState(opts.repoRoot);
+	const baselineFiles = baseline?.files ?? {};
+	const files = Object.keys(current)
+		.filter((relPath) => baselineFiles[relPath] !== current[relPath])
+		.sort();
+
+	let patch = "# no diff\n";
+	if (files.length > 0) {
+		const diff = await execa("git", ["diff", "HEAD", "--", ...files], {
+			cwd: opts.repoRoot,
+			reject: false,
+		});
+		patch = diff.stdout || "# no diff\n";
+		const currentUntracked = new Set(await listUntrackedFiles(opts.repoRoot));
+		const untrackedFiles = files.filter((relPath) =>
+			currentUntracked.has(relPath),
+		);
+		if (untrackedFiles.length > 0) {
+			patch = `${patch}\n\n# Untracked session files\n${untrackedFiles.map((file) => `- ${file}`).join("\n")}`;
+		}
+	}
+
+	return {
+		files,
+		patch,
+		preexisting_files: Object.keys(baselineFiles).sort(),
+		current_dirty_files: Object.keys(current).sort(),
+	};
+}
+
 export async function writeSessionArtifacts(opts: {
 	session: SessionContext;
 	repoRoot: string;
 }): Promise<void> {
 	const { session, repoRoot } = opts;
 	let files: string[] = [];
-	let patch = "";
+	let patch = "# no diff\n";
+	let preexisting_files: string[] = [];
+	let current_dirty_files: string[] = [];
 	try {
-		const nameOnly = await execa("git", ["diff", "--name-only", "HEAD"], {
-			cwd: repoRoot,
-			reject: false,
-		});
-		files = nameOnly.stdout.split("\n").filter(Boolean);
-		const diff = await execa("git", ["diff", "HEAD"], {
-			cwd: repoRoot,
-			reject: false,
-		});
-		patch = diff.stdout ?? "";
+		const diff = await computeSessionScopedDiff({ repoRoot, session });
+		files = diff.files;
+		patch = diff.patch;
+		preexisting_files = diff.preexisting_files;
+		current_dirty_files = diff.current_dirty_files;
 	} catch {
 		files = [];
 	}
 
 	await fs.writeJson(
 		session.path("changed-files.json"),
-		{ files, repoRoot, generated_at: new Date().toISOString() },
+		{
+			files,
+			repoRoot,
+			generated_at: new Date().toISOString(),
+			preexisting_files,
+			current_dirty_files,
+		},
 		{ spaces: 2 },
 	);
 	await fs.writeFile(session.path("git-diff.patch"), patch || "# no diff\n");

@@ -98,7 +98,15 @@ if (!orchText.includes("{{EXPERT_CATALOG}}")) {
 
 const r = spawnSync(
 	"pi",
-	["-e", "extensions/pi-pi.ts", "-e", "extensions/theme-cycler.ts", "--help"],
+	[
+		"-e",
+		"extensions/playground-boot.ts",
+		"-e",
+		"extensions/pi-pi.ts",
+		"-e",
+		"extensions/theme-cycler.ts",
+		"--help",
+	],
 	{ cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
 );
 if (r.error || r.status !== 0) {

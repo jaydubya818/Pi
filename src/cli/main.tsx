@@ -161,7 +161,12 @@ function ChatApp(props: {
 		makeMessage(
 			"system",
 			"system",
-			"Type agent requests  ·  /help  ·  Tab workers (off by default)  ·  d debug  ·  Ctrl+C exit",
+			"Type agent requests  ·  /help  ·  Tab toggles worker lines (hidden by default)  ·  d = debug  ·  Ctrl+C exit",
+		),
+		makeMessage(
+			"system",
+			"system",
+			"After each turn this app prints session → <path> under .runtime/sessions/  ·  npm run inspect-session -- <that-path>  ·  Non-interactive smoke: PI_MOCK=1 npm run demo",
 		),
 	]);
 	const [buf, setBuf] = useState("");

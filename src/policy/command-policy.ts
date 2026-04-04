@@ -15,11 +15,44 @@ const PKG_MANAGERS = [
 	/\bcargo\s+(add|install)\b/,
 ];
 
+const SHELL_INTERPRETERS = new Set([
+	"bash",
+	"zsh",
+	"sh",
+	"python",
+	"python3",
+	"node",
+	"ruby",
+	"perl",
+	"osascript",
+]);
+
 const SECRETISH = [/\.env/i, /credential/i, /\.pem/i, /id_rsa/i];
 
 export type CommandCheck =
 	| { ok: true }
 	| { ok: false; code: string; message: string };
+
+function firstExecutables(cmd: string): string[] {
+	return cmd
+		.split(/&&|;|\|\||\|/g)
+		.map((chunk) => chunk.trim())
+		.filter(Boolean)
+		.map(
+			(chunk) => chunk.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\S+/g) ?? [],
+		)
+		.map((tokens) => {
+			let i = 0;
+			while (
+				i < tokens.length &&
+				/^[A-Za-z_][A-Za-z0-9_]*=.*/.test(tokens[i] ?? "")
+			) {
+				i += 1;
+			}
+			return tokens[i]?.replace(/^['"]|['"]$/g, "").toLowerCase() ?? "";
+		})
+		.filter(Boolean);
+}
 
 export function checkShellCommand(
 	cmd: string,
@@ -46,6 +79,23 @@ export function checkShellCommand(
 				};
 			}
 		}
+	}
+	for (const executable of firstExecutables(c)) {
+		if (SHELL_INTERPRETERS.has(executable)) {
+			return {
+				ok: false,
+				code: "shell_interpreter",
+				message:
+					"Nested shells and scripting runtimes are blocked in mediated bash",
+			};
+		}
+	}
+	if (/[<>]/.test(c)) {
+		return {
+			ok: false,
+			code: "shell_redirection",
+			message: "Shell redirection is blocked in mediated bash",
+		};
 	}
 	return { ok: true };
 }

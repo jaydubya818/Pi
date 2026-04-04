@@ -544,6 +544,8 @@ export const HELP_LINES: readonly string[] = [
 	"  App commands   →  /help  /reload  /debug",
 	"  Keys           →  Tab=workers (hidden by default)  d=debug  Ctrl+C=exit",
 	"                    exit / quit = clean exit",
+	"  Sessions       →  path after each turn: npm run inspect-session -- <dir>",
+	"  Mock pipeline  →  PI_MOCK=1 npm run demo (prints session path at end)",
 	"  Shell commands  →  run in your terminal (not here)",
 	"─────────────────────────────────────────────────────",
 ];

@@ -9,6 +9,13 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+/** Same load order as npm `pi-play:*` / `pi-tier:v*` (boot is a no-op without PI_PLAYGROUND_LABEL). */
+const PLAYGROUND_BOOT = ["-e", "extensions/playground-boot.ts"];
+function withPlaygroundBoot(args) {
+	if (args.length === 0) return args;
+	return [...PLAYGROUND_BOOT, ...args];
+}
+
 const stacks = [
 	{ name: "tier-v0-default", args: [] },
 	{ name: "pure-focus", args: ["-e", "extensions/pure-focus.ts"] },
@@ -103,7 +110,7 @@ const stacks = [
 
 let failed = false;
 for (const { name, args } of stacks) {
-	const r = spawnSync("pi", [...args, "--help"], {
+	const r = spawnSync("pi", [...withPlaygroundBoot(args), "--help"], {
 		cwd: root,
 		encoding: "utf-8",
 		stdio: ["ignore", "pipe", "pipe"],

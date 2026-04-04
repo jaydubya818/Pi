@@ -71,7 +71,7 @@ function extractDeletePathsFromCommand(
 	for (const chunkRaw of chunks) {
 		const chunk = chunkRaw.trim();
 		if (!/\b(rm|rmdir|unlink)\b/.test(chunk)) continue;
-		const tokens = chunk.split(/\s+/).filter(Boolean);
+		const tokens = tokenizeShell(chunk);
 		let seenDeleteCmd = false;
 		for (const tk of tokens) {
 			if (tk === "rm" || tk === "rmdir" || tk === "unlink") {
@@ -83,6 +83,165 @@ function extractDeletePathsFromCommand(
 		}
 	}
 	return out;
+}
+
+type ShellIntent = { kind: "read" | "write" | "delete"; path: string };
+
+function tokenizeShell(command: string): string[] {
+	const tokens = command.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\S+/g);
+	return (tokens ?? []).map((token) => {
+		if (
+			token.length >= 2 &&
+			((token.startsWith('"') && token.endsWith('"')) ||
+				(token.startsWith("'") && token.endsWith("'")))
+		) {
+			return token.slice(1, -1);
+		}
+		return token;
+	});
+}
+
+function pushShellIntents(
+	out: ShellIntent[],
+	kind: ShellIntent["kind"],
+	workdir: string,
+	paths: string[],
+): void {
+	for (const path of paths) {
+		if (!path || path.startsWith("~")) continue;
+		out.push({ kind, path: normalizePath(workdir, path) });
+	}
+}
+
+function nonOptionArgs(tokens: string[]): string[] {
+	return tokens.filter((token) => token && !token.startsWith("-"));
+}
+
+export function collectShellIntents(
+	command: string,
+	workdir: string,
+):
+	| { ok: true; intents: ShellIntent[] }
+	| { ok: false; code: string; message: string } {
+	if (/\$\(|`/.test(command)) {
+		return {
+			ok: false,
+			code: "shell_substitution",
+			message: "Command substitution is blocked in mediated bash",
+		};
+	}
+
+	const intents: ShellIntent[] = [];
+	const chunks = command.split(/&&|;|\|\|/g);
+	for (const chunkRaw of chunks) {
+		const chunk = chunkRaw.trim();
+		if (!chunk) continue;
+		const tokens = tokenizeShell(chunk);
+		if (tokens.some((token) => token.startsWith("~"))) {
+			return {
+				ok: false,
+				code: "shell_home_path",
+				message: "Home-directory shell paths are blocked in mediated bash",
+			};
+		}
+		let i = 0;
+		while (
+			i < tokens.length &&
+			/^[A-Za-z_][A-Za-z0-9_]*=.*/.test(tokens[i] ?? "")
+		) {
+			i++;
+		}
+		const cmd = tokens[i]?.toLowerCase();
+		if (!cmd) continue;
+		const args = tokens.slice(i + 1);
+		const argsNoOpts = nonOptionArgs(args);
+
+		if (
+			cmd === "cat" ||
+			cmd === "head" ||
+			cmd === "tail" ||
+			cmd === "wc" ||
+			cmd === "stat" ||
+			cmd === "sort" ||
+			cmd === "uniq" ||
+			cmd === "cut"
+		) {
+			pushShellIntents(intents, "read", workdir, argsNoOpts);
+			continue;
+		}
+		if (cmd === "ls") {
+			pushShellIntents(intents, "read", workdir, argsNoOpts);
+			continue;
+		}
+		if (cmd === "find") {
+			pushShellIntents(intents, "read", workdir, argsNoOpts.slice(0, 1));
+			continue;
+		}
+		if (cmd === "grep" || cmd === "rg") {
+			pushShellIntents(intents, "read", workdir, argsNoOpts.slice(1));
+			continue;
+		}
+		if (cmd === "touch" || cmd === "mkdir") {
+			pushShellIntents(intents, "write", workdir, argsNoOpts);
+			continue;
+		}
+		if (cmd === "tee") {
+			pushShellIntents(intents, "write", workdir, argsNoOpts);
+			continue;
+		}
+		if (cmd === "chmod" || cmd === "chown") {
+			pushShellIntents(intents, "write", workdir, argsNoOpts.slice(1));
+			continue;
+		}
+		if (cmd === "cp" || cmd === "mv" || cmd === "install" || cmd === "ln") {
+			if (argsNoOpts.length >= 2) {
+				pushShellIntents(intents, "read", workdir, argsNoOpts.slice(0, -1));
+				pushShellIntents(intents, "write", workdir, argsNoOpts.slice(-1));
+			}
+			continue;
+		}
+		if (cmd === "sed") {
+			const hasInlineEdit = args.some(
+				(token) => token === "-i" || token.startsWith("-i"),
+			);
+			const fileArgs = argsNoOpts.slice(1);
+			pushShellIntents(
+				intents,
+				hasInlineEdit ? "write" : "read",
+				workdir,
+				fileArgs,
+			);
+			continue;
+		}
+		if (cmd === "rm" || cmd === "rmdir" || cmd === "unlink") {
+			pushShellIntents(
+				intents,
+				"delete",
+				workdir,
+				extractDeletePathsFromCommand(chunk, workdir).map((abs) => abs),
+			);
+			continue;
+		}
+
+		const explicitArgs = argsNoOpts.filter(
+			(token) =>
+				token === "." ||
+				token === ".." ||
+				token.startsWith("./") ||
+				token.startsWith("../") ||
+				token.startsWith("/") ||
+				token.includes("/"),
+		);
+		if (explicitArgs.length > 0) {
+			return {
+				ok: false,
+				code: "unmediated_shell_path",
+				message: `Shell command ${cmd} uses explicit paths that are not policy-mediated`,
+			};
+		}
+	}
+
+	return { ok: true, intents };
 }
 
 async function gateSupervisedMutation(opts: {
@@ -316,7 +475,68 @@ export function wrapAgentTools(
 					opts.cbs.onToolEnd(tool.name, opts.agentName, false);
 					return textResult(`POLICY_BLOCKED: ${bv.code} — ${bv.message}`);
 				}
-				for (const abs of extractDeletePathsFromCommand(cmd, opts.workdir)) {
+				const shellIntentResult = collectShellIntents(cmd, opts.workdir);
+				if (!shellIntentResult.ok) {
+					const violation = {
+						code: shellIntentResult.code,
+						message: shellIntentResult.message,
+					} satisfies Violation;
+					opts.cbs.onBlocked(violation, tool.name, opts.agentName);
+					await opts.session.emit({
+						correlation_id: opts.session.correlationBase,
+						event_type: "policy_blocked",
+						agent: opts.agentName,
+						parent_agent: null,
+						team: opts.team,
+						payload: { tool: tool.name, violation },
+					});
+					opts.cbs.onToolEnd(tool.name, opts.agentName, false);
+					return textResult(
+						`POLICY_BLOCKED: ${violation.code} — ${violation.message}`,
+					);
+				}
+				const shellReadPaths = shellIntentResult.intents
+					.filter((intent) => intent.kind === "read")
+					.map((intent) => intent.path);
+				const shellWritePaths = shellIntentResult.intents
+					.filter((intent) => intent.kind === "write")
+					.map((intent) => intent.path);
+				const shellDeletePaths = shellIntentResult.intents
+					.filter((intent) => intent.kind === "delete")
+					.map((intent) => intent.path);
+				for (const abs of shellReadPaths) {
+					const rv = opts.policy.checkRead(abs, opts.readableRel);
+					if (rv) {
+						opts.cbs.onBlocked(rv, tool.name, opts.agentName);
+						await opts.session.emit({
+							correlation_id: opts.session.correlationBase,
+							event_type: "policy_blocked",
+							agent: opts.agentName,
+							parent_agent: null,
+							team: opts.team,
+							payload: { tool: tool.name, violation: rv },
+						});
+						opts.cbs.onToolEnd(tool.name, opts.agentName, false);
+						return textResult(`POLICY_BLOCKED: ${rv.code} — ${rv.message}`);
+					}
+				}
+				for (const abs of shellWritePaths) {
+					const wv = opts.policy.checkWrite(abs);
+					if (wv) {
+						opts.cbs.onBlocked(wv, tool.name, opts.agentName);
+						await opts.session.emit({
+							correlation_id: opts.session.correlationBase,
+							event_type: "policy_blocked",
+							agent: opts.agentName,
+							parent_agent: null,
+							team: opts.team,
+							payload: { tool: tool.name, violation: wv },
+						});
+						opts.cbs.onToolEnd(tool.name, opts.agentName, false);
+						return textResult(`POLICY_BLOCKED: ${wv.code} — ${wv.message}`);
+					}
+				}
+				for (const abs of shellDeletePaths) {
 					const dv = opts.policy.checkDelete(abs);
 					if (dv) {
 						opts.cbs.onBlocked(dv, tool.name, opts.agentName);
@@ -332,16 +552,25 @@ export function wrapAgentTools(
 						return textResult(`POLICY_BLOCKED: ${dv.code} — ${dv.message}`);
 					}
 				}
-				if (opts.autonomy === "supervised" && shellCaps.has("package")) {
+				if (
+					opts.autonomy === "supervised" &&
+					(shellCaps.has("package") || shellWritePaths.length > 0)
+				) {
 					const ok = await gateSupervisedMutation({
 						session: opts.session,
 						agentName: opts.agentName,
 						team: opts.team,
 						tool: "bash",
-						action: "package manager / install",
-						paths: [],
+						action:
+							shellWritePaths.length > 0
+								? `shell write (${shellWritePaths.join(", ")})`
+								: "package manager / install",
+						paths: shellWritePaths,
 						command: cmd,
-						reason: "supervised: package manager command",
+						reason:
+							shellWritePaths.length > 0
+								? "supervised: shell write requires approval"
+								: "supervised: package manager command",
 						cbs: opts.cbs,
 					});
 					if (!ok) {
@@ -376,7 +605,7 @@ export function wrapAgentTools(
 				}
 				if (
 					(opts.autonomy === "supervised" || opts.autonomy === "active") &&
-					shellCaps.has("delete")
+					shellDeletePaths.length > 0
 				) {
 					const okRm = await gateSupervisedMutation({
 						session: opts.session,
@@ -384,7 +613,7 @@ export function wrapAgentTools(
 						team: opts.team,
 						tool: "bash",
 						action: "delete / rm / unlink",
-						paths: [],
+						paths: shellDeletePaths,
 						command: cmd,
 						reason: "delete or removal shell command requires approval",
 						cbs: opts.cbs,
@@ -399,9 +628,10 @@ export function wrapAgentTools(
 					(opts.autonomy === "supervised" || opts.autonomy === "active")
 				) {
 					const bashMutation =
+						shellWritePaths.length > 0 ||
+						shellDeletePaths.length > 0 ||
 						shellCaps.has("git") ||
 						shellCaps.has("package") ||
-						shellCaps.has("delete") ||
 						shellCaps.has("config");
 					if (bashMutation) {
 						const okAfterValidationFail = await gateSupervisedMutation({
@@ -410,7 +640,7 @@ export function wrapAgentTools(
 							team: opts.team,
 							tool: "bash",
 							action: "mutating bash after validation failure",
-							paths: [],
+							paths: [...shellWritePaths, ...shellDeletePaths],
 							command: cmd,
 							reason: "validation failure occurred earlier in this turn",
 							cbs: opts.cbs,
@@ -428,6 +658,17 @@ export function wrapAgentTools(
 				if (tool.name === "write" || tool.name === "edit") {
 					const paths = extractPaths(tool.name, p, opts.workdir);
 					for (const abs of paths) opts.policy.noteFileTouch(abs, 10);
+				}
+				if (tool.name === "bash") {
+					const cmd = typeof p.command === "string" ? p.command : "";
+					const shellIntentResult = collectShellIntents(cmd, opts.workdir);
+					if (shellIntentResult.ok) {
+						for (const intent of shellIntentResult.intents) {
+							if (intent.kind === "write" || intent.kind === "delete") {
+								opts.policy.noteFileTouch(intent.path, 10);
+							}
+						}
+					}
 				}
 				opts.cbs.onToolEnd(tool.name, opts.agentName, true);
 				await opts.session.emit({

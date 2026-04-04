@@ -58,6 +58,11 @@ The repo **does not** ship Playwright (or similar) for Ink/Pi. Nothing here cert
 Install once:
 
 ```bash
+# Prerequisites
+brew install just            # task runner (required for just tier-vN / just ext-* recipes)
+npm install -g @mariozechner/pi-coding-agent   # Pi CLI (required for playground stacks)
+export OPENAI_API_KEY=sk-...  # or ANTHROPIC_API_KEY — Pi reads from shell env, not .env
+
 cd pi-multi-team-local
 npm install
 cp .env.example .env   # optional: for control-plane convenience (Pi still wants keys in shell)
@@ -179,6 +184,17 @@ YAML smoke (no TUI): **`npm run verify-tier2`**.
 ## Testing
 
 Semantics for **structural vs interactive** proof: [Verification Status](#verification-status). For **feature-by-feature** playground status: [Transcript Feature Test Matrix](docs/pi-playground/TRANSCRIPT-FEATURE-TEST-MATRIX.md).
+
+**Test files** (`npm test` / `npm run check`):
+
+| File | Covers |
+|------|--------|
+| `src/cli/shell-guard.test.ts` | Shell input detection / guard patterns |
+| `src/agents/prompt-build.test.ts` | Skill loading and prompt construction |
+| `src/agents/approval-queue.test.ts` | Approval gate queue behavior |
+| `src/agents/mediated-tools.test.ts` | Tool mediation and policy wrapping |
+| `src/cli/demo-exit.test.ts` | Demo mode exit / mock path |
+| `src/policy/command-policy.test.ts` | Command-level policy rules |
 
 | Command | What it runs |
 |---------|----------------|
@@ -491,9 +507,10 @@ The [**library**](https://github.com/disler/the-library) meta-skill is **vendore
 
 In [`src/agents/prompt-build.ts`](src/agents/prompt-build.ts), each configured skill name is loaded **at most once** (duplicate YAML entries are ignored). For a name like `library`, the loader tries in order:
 
-1. `.pi/skills/<name>.md`
-2. `.pi/skills/<name>/SKILL.md`
-3. `vendor/<name>/SKILL.md` ← **library** resolves here as `vendor/library/SKILL.md`
+1. `.pi/skills/<name>/SKILL.md` ← **required format for all project skills**
+2. `vendor/<name>/SKILL.md` ← **library** resolves here as `vendor/library/SKILL.md`
+
+> **Note:** Pi requires project-scoped skills to live in a `skillname/SKILL.md` subdirectory (not flat `.md` files). Each `SKILL.md` must include `name` and `description` in its YAML frontmatter, and the `name` must match the parent directory. Descriptions containing colons must be quoted.
 
 So the vendored copy wins whenever there is no overlapping file under `.pi/skills/`.
 
