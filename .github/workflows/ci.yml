@@ -19,6 +19,6 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
-      - run: npm run verify-tier2
-      - run: npm run verify-tier3
+      - run: npm run verify:orchestration
+      - run: npm run verify:meta-agent
       - run: npm run pi-play:verify-if-available

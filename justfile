@@ -29,8 +29,8 @@ clean-pi-lock:
 # Repo checks (no Pi TUI): typecheck + lint + unit tests + YAML/meta dry-runs + pi stacks if pi on PATH
 verify:
     npm run check
-    npm run verify-tier2
-    npm run verify-tier3
+    npm run verify:orchestration
+    npm run verify:meta-agent
     npm run pi-play:verify-if-available
 
 # g1
@@ -59,7 +59,7 @@ ext-purpose-gate:
 ext-tool-counter:
     pi -e extensions/tool-counter.ts
 
-# 7. Tool counter widget + theme cycler (Tier 1 v6)
+# 7. Tool counter widget + theme cycler
 ext-tool-counter-widget:
     pi -e extensions/tool-counter-widget.ts -e extensions/minimal.ts -e extensions/theme-cycler.ts
 
@@ -105,70 +105,16 @@ ext-session-replay:
 ext-theme-cycler:
     pi -e extensions/theme-cycler.ts -e extensions/minimal.ts
 
-# Tier 1 Pi variants (v0–v8) — transcript-aligned entrypoints
+# Composite patterns
 
-tier-v0:
-    pi
-
-tier-v1:
-    pi -e extensions/pure-focus.ts
-
-tier-v2:
-    pi -e extensions/minimal.ts -e extensions/theme-cycler.ts
-
-tier-v3:
-    pi -e extensions/cross-agent.ts -e extensions/minimal.ts
-
-tier-v4:
-    pi -e extensions/purpose-gate.ts -e extensions/minimal.ts
-
-tier-v5:
-    pi -e extensions/tool-counter.ts
-
-tier-v6:
-    pi -e extensions/tool-counter-widget.ts -e extensions/minimal.ts -e extensions/theme-cycler.ts
-
-tier-v7:
-    pi -e extensions/subagent-widget.ts -e extensions/pure-focus.ts -e extensions/theme-cycler.ts
-
-tier-v8:
-    pi -e extensions/tilldone.ts -e extensions/theme-cycler.ts
-
-# Tier 2 orchestration (v9–v12)
-
-tier-v9:
-    pi -e extensions/agent-team.ts -e extensions/theme-cycler.ts
-
-tier-v10:
-    pi -e extensions/system-select.ts -e extensions/minimal.ts -e extensions/theme-cycler.ts
-
-tier-v11:
-    pi -e extensions/damage-control.ts -e extensions/minimal.ts -e extensions/theme-cycler.ts
-
-tier-v12:
-    pi -e extensions/agent-chain.ts -e extensions/theme-cycler.ts
-
-# Tier 3 meta-agent (v13) — same stack as ext-pi-pi / pi-play:pi-pi
-
-tier-v13:
-    pi -e extensions/pi-pi.ts -e extensions/theme-cycler.ts
-
-# Tier 2+ composite patterns (v14–v15) — guarded multi-agent and disciplined delegation
-
-# v14. Guarded team: damage-control safety layer + agent-team dispatcher
-# Realistic production pattern: all team dispatch is audited and rule-enforced.
+# Guarded team: damage-control safety layer + agent-team dispatcher
+# All team dispatch is audited and rule-enforced.
 ext-guarded-team:
     pi -e extensions/damage-control.ts -e extensions/agent-team.ts -e extensions/theme-cycler.ts
 
-tier-v14:
-    pi -e extensions/damage-control.ts -e extensions/agent-team.ts -e extensions/theme-cycler.ts
-
-# v15. Disciplined subagent: TillDone task discipline + subagent-widget async delegation
+# Disciplined subagent: TillDone task discipline + subagent-widget async delegation
 # Parent must define tasks before delegating; each /sub inherits the task-driven workflow.
 ext-disciplined-subagent:
-    pi -e extensions/tilldone.ts -e extensions/subagent-widget.ts -e extensions/theme-cycler.ts
-
-tier-v15:
     pi -e extensions/tilldone.ts -e extensions/subagent-widget.ts -e extensions/theme-cycler.ts
 
 # utils
