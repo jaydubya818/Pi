@@ -132,6 +132,58 @@ just verify                      # check + tier2 + tier3 + pi-play verify-if-ava
 
 ---
 
+## Pi Playground Architecture Map
+
+One-page operator reference: **tier → extension → supporting files → launch command**.
+
+### Tier 1 — UI / TUI / focused-agent variants
+
+| Tier / Variant | Extension(s) | Supporting Files | Launch Command | Purpose |
+|----------------|-------------|-----------------|----------------|---------|
+| **v0** default Pi | _(none)_ | `.pi/settings.json`, `.pi/themes/synthwave.json` | `npm run pi-tier:v0` (`just tier-v0`) | Stock Pi with project theme + settings |
+| **v1** pure focus | `pure-focus.ts` | `.pi/settings.json` | `npm run pi-tier:v1` (`just tier-v1`) | Strip all footer/status UI — minimal chrome |
+| **v2** minimal footer | `minimal.ts`, `theme-cycler.ts` | `.pi/themes/` | `npm run pi-tier:v2` (`just tier-v2`) | Compact model + context bar; Ctrl+X/Q theme cycling |
+| **v3** cross-agent | `cross-agent.ts`, `minimal.ts` | `.pi/agents/`, `.claude/`, `.gemini/`, `.codex/` | `npm run pi-tier:v3` (`just tier-v3`) | Discover commands/skills/agents from other AI tool dirs |
+| **v4** purpose gate | `purpose-gate.ts`, `minimal.ts` | `.pi/settings.json` | `npm run pi-tier:v4` (`just tier-v4`) | Force intent declaration; persists purpose widget + injects into system prompt |
+| **v5** tool counter | `tool-counter.ts` | `.pi/themes/synthwave.json` | `npm run pi-tier:v5` (`just tier-v5`) | Rich footer: model, context, tokens in/out, cost, cwd, branch, per-tool tallies |
+| **v6** tool counter widget | `tool-counter-widget.ts`, `minimal.ts`, `theme-cycler.ts` | `.pi/themes/` | `npm run pi-tier:v6` (`just tier-v6`) | Live above-editor widget showing per-tool call counts |
+| **v7** subagent widget | `subagent-widget.ts`, `pure-focus.ts`, `theme-cycler.ts` | `.pi/themes/` | `npm run pi-tier:v7` (`just tier-v7`) | `/sub`, `/subcont`, `/subrm` — background Pi subagents with persistent widgets |
+| **v8** tilldone | `tilldone.ts`, `theme-cycler.ts` | `.pi/themes/` | `npm run pi-tier:v8` (`just tier-v8`) | Task-discipline gating — agent must declare tasks before using any other tools |
+
+### Tier 2 — Orchestration / Safety
+
+| Tier / Variant | Extension(s) | Supporting Files | Launch Command | Purpose |
+|----------------|-------------|-----------------|----------------|---------|
+| **v9** agent team | `agent-team.ts` | `.pi/agents/teams.yaml`, `.pi/agents/*.md` | `npm run pi-tier:v9` (`just tier-v9`) | Dispatcher-only orchestrator; primary agent routes work via `dispatch_agent` to specialist personas |
+| **v10** system select | `system-select.ts`, `minimal.ts`, `theme-cycler.ts` | `.pi/agents/`, `.pi/themes/` | `npm run pi-tier:v10` (`just tier-v10`) | `/system` picker to swap active persona/system prompt mid-session |
+| **v11** damage control | `damage-control.ts` | `.pi/damage-control-rules.yaml`, `.pi/themes/synthwave.json` | `npm run pi-tier:v11` (`just tier-v11`) | Intercepts `tool_call`; enforces regex/path rules with hard-block or confirm-before-proceed |
+| **v12** agent chain | `agent-chain.ts` | `.pi/agents/agent-chain.yaml`, `.pi/agents/*.md` | `npm run pi-tier:v12` (`just tier-v12`) | Sequential pipeline: `/chain <name>`; step output feeds next via `$INPUT`; `$ORIGINAL` always available |
+
+### Tier 3 — Meta-Agent
+
+| Tier / Variant | Extension(s) | Supporting Files | Launch Command | Purpose |
+|----------------|-------------|-----------------|----------------|---------|
+| **v13** Pi Pi | `pi-pi.ts` | `.pi/agents/pi-pi/pi-orchestrator.md`, `.pi/agents/pi-pi/*.md` (12 experts), `docs/pi-playground/TIER3-META-AGENT.md` | `npm run pi-tier:v13` (`just tier-v13`) | Meta-agent that builds Pi components; primary agent fans out to parallel read-only experts via `query_experts`, then synthesizes and writes files |
+
+---
+
+> **Notes:**
+> - The **control plane** (`src/`) is a separate Ink app for supervised multi-team orchestration — it is not part of the playground tiers above.
+> - The playground runs **Pi CLI + extensions** (`pi -e extensions/<name>.ts`); tiers are convenience wrappers.
+> - Tier structure and YAML configs are **structurally verified** (`npm run verify-tier2`, `verify-tier3`). Full TUI behavior (widgets, overlays, tool interception, agent dispatch) requires a **real terminal** and often **live API keys**.
+
+### Fastest Path to Explore
+
+| Step | Why |
+|------|-----|
+| **1. Start with v1** — `npm run pi-tier:v1` | Simplest possible extension; confirms Pi + keys work |
+| **2. Try v8** — `npm run pi-tier:v8` | TillDone shows task-gating and custom tool registration |
+| **3. Run v9** — `npm run pi-tier:v9` | Dispatcher pattern: see how `dispatch_agent` + team YAML work |
+| **4. Run v12** — `npm run pi-tier:v12` | Agent chain: watch a `/chain plan-build-review` pipeline execute |
+| **5. Run v13** — `npm run pi-tier:v13` | Pi Pi meta-agent: parallel expert research → synthesized output |
+
+---
+
 ## Control Plane vs Pi CLI Playground
 
 | | Control plane | Pi CLI playground |
