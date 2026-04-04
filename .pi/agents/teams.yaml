@@ -1,0 +1,41 @@
+# Tier 2 orchestration: `default` = lean triad (boot default); `full` = alternate wide roster.
+default:
+  - planner
+  - builder
+  - reviewer
+
+full:
+  - scout
+  - planner
+  - builder
+  - reviewer
+  - documenter
+  - red-team
+
+plan-build:
+  - planner
+  - builder
+  - reviewer
+
+info:
+  - scout
+  - documenter
+  - reviewer
+
+frontend:
+  - planner
+  - builder
+  - bowser
+
+# Tier 3 meta-agent (Pi Pi): experts under .pi/agents/pi-pi/ — primary loads all *.md except pi-orchestrator.md
+pi-pi:
+  - prompt-expert
+  - ext-expert
+  - theme-expert
+  - tui-expert
+  - teams-chains-expert
+  - safety-expert
+  - docs-expert
+  - skill-expert
+  - config-expert
+  - agent-expert

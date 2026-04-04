@@ -1,0 +1,15 @@
+default_dirs:
+  skills:
+    - default: .pi/skills/
+    - global: ~/.pi/skills/
+  agents:
+    - default: .pi/agents/
+    - global: ~/.pi/agents/
+  prompts:
+    - default: .pi/prompts/
+    - global: ~/.pi/prompts/
+
+library:
+  skills: []
+  agents: []
+  prompts: []

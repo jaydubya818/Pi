@@ -5,7 +5,13 @@ import { execa } from "execa";
 import fs from "fs-extra";
 import { Box, Text, useApp, useInput } from "ink";
 import { render } from "ink";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import {
 	type ApprovalDecision,
 	getActiveApproval,
@@ -18,6 +24,17 @@ import type { Multi_teamConfig } from "../models/config-schema.js";
 import { PolicyEngine } from "../policy/policy-engine.js";
 import { SessionContext } from "../sessions/session-context.js";
 import { newCorrelationId, newSessionId } from "../utils/ids.js";
+import { isShellLike } from "../utils/shell-guard.js";
+import {
+	type ChatMessage,
+	Composer,
+	HELP_LINES,
+	Header,
+	MessageRow,
+	StatusBar,
+	classifyAgent,
+	makeMessage,
+} from "./chat-ui.js";
 import {
 	type ReplayRow,
 	filterReplayRows,
@@ -43,9 +60,12 @@ async function cmdCheckEnv(): Promise<void> {
 			issues.push(`${bin} not on PATH (optional for some flows)`);
 		}
 	}
-	const mono = "/Users/jaywest/Pi/pi-mono";
+	const mono =
+		process.env.PI_MONO_PATH?.trim() || resolve(PROJECT_ROOT, "..", "pi-mono");
 	if (!(await fs.pathExists(mono)))
-		issues.push(`Reference pi-mono missing: ${mono}`);
+		issues.push(
+			`Reference pi-mono missing: ${mono} (set PI_MONO_PATH or clone as sibling ../pi-mono)`,
+		);
 	await fs.ensureDir(join(PROJECT_ROOT, ".runtime"));
 	try {
 		await fs.access(join(PROJECT_ROOT, ".runtime"), fsConstants.W_OK);
@@ -77,6 +97,57 @@ async function cmdInspectSession(sessionPath: string): Promise<void> {
 
 type ApprovalUiState = NonNullable<ReturnType<typeof getActiveApproval>>;
 
+// ── Approval box (needs approval-queue types, kept local) ─────────────────
+
+function ApprovalBox({ approval }: { approval: ApprovalUiState }) {
+	return (
+		<Box
+			flexDirection="column"
+			borderStyle="round"
+			borderColor="yellow"
+			paddingX={1}
+			marginBottom={1}
+		>
+			<Text bold color="yellow">
+				{"⚡ APPROVAL REQUIRED — press 1–4"}
+			</Text>
+			<Text>
+				{"  agent="}
+				{approval.agent}
+				{"  team="}
+				{approval.team ?? "—"}
+				{"  tool="}
+				{approval.tool}
+			</Text>
+			<Text dimColor>
+				{"  action: "}
+				{approval.action}
+			</Text>
+			<Text dimColor>
+				{"  reason: "}
+				{approval.reason}
+			</Text>
+			{approval.paths.length > 0 ? (
+				<Text dimColor>
+					{"  paths: "}
+					{approval.paths.join(", ")}
+				</Text>
+			) : null}
+			{approval.command ? (
+				<Text dimColor>
+					{"  cmd: "}
+					{approval.command}
+				</Text>
+			) : null}
+			<Text dimColor>
+				{"  1=approve once  2=deny  3=approve session  4=cancel turn"}
+			</Text>
+		</Box>
+	);
+}
+
+// ── ChatApp ───────────────────────────────────────────────────────────────
+
 function ChatApp(props: {
 	cfg: Awaited<ReturnType<typeof loadConfig>>;
 	sessionsBase: string;
@@ -84,12 +155,19 @@ function ChatApp(props: {
 	approvalAuto: boolean;
 }) {
 	const { exit } = useApp();
-	const [lines, setLines] = useState<string[]>([
-		"pi-multi-team-local — Ctrl+C to exit. Type message + Enter. Supervised: 1–4 when approving.",
+
+	// ── State ──────────────────────────────────────────────────────────
+	const [messages, setMessages] = useState<ChatMessage[]>(() => [
+		makeMessage(
+			"system",
+			"system",
+			"Type agent requests  ·  /help  ·  Tab workers (off by default)  ·  d debug  ·  Ctrl+C exit",
+		),
 	]);
 	const [buf, setBuf] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [showWorkers, setShowWorkers] = useState(props.initialShowWorkers);
+	const [debugMode, setDebugMode] = useState(false);
 	const [status, setStatus] = useState<Record<string, string>>({});
 	const [approval, setApproval] = useState<ApprovalUiState | null>(null);
 	const [cfg, setCfg] = useState(props.cfg);
@@ -104,6 +182,18 @@ function ChatApp(props: {
 	const [lastArtifactCount, setLastArtifactCount] = useState<number | null>(
 		null,
 	);
+	const startTimeRef = useRef(Date.now());
+	const [elapsed, setElapsed] = useState(0);
+
+	// Elapsed timer
+	useEffect(() => {
+		const t = setInterval(
+			() => setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000)),
+			1000,
+		);
+		return () => clearInterval(t);
+	}, []);
+
 	const topologyLine = useMemo(
 		() =>
 			cfg.teams
@@ -113,6 +203,30 @@ function ChatApp(props: {
 		[cfg.teams],
 	);
 
+	/** agent-name → resolved model string (alias → full name via cfg.models) */
+	const modelByAgent = useMemo(() => {
+		// cfg.models maps alias → full-model-id; fall back to raw field value
+		const resolve = (m: string) => cfg.models[m] ?? m;
+		const map: Record<string, string> = {};
+		map[cfg.orchestrator.name] = resolve(cfg.orchestrator.model);
+		for (const team of cfg.teams) {
+			map[team.lead.name] = resolve(team.lead.model);
+			for (const member of team.members) {
+				map[member.name] = resolve(member.model);
+			}
+		}
+		return map;
+	}, [cfg]);
+
+	/** Append a structured message to the chat pane. */
+	const addMsg = useCallback(
+		(kind: ChatMessage["kind"], from: string, text: string) => {
+			setMessages((ms) => [...ms, makeMessage(kind, from, text)]);
+		},
+		[],
+	);
+
+	// ── Session management ─────────────────────────────────────────────
 	const createSession = useCallback(
 		async (nextCfg: Multi_teamConfig): Promise<SessionContext> => {
 			const sid = newSessionId();
@@ -148,11 +262,14 @@ function ChatApp(props: {
 		return () => setApprovalUiNotifier(null);
 	}, []);
 
+	// ── Input handler ──────────────────────────────────────────────────
 	useInput(
 		useCallback(
 			(input, key) => {
+				// Real Ctrl+C always exits immediately
 				if (key.ctrl && input === "c") exit();
 
+				// Approval mode intercepts 1–4
 				const active = getActiveApproval();
 				if (active) {
 					const decide: Record<string, ApprovalDecision> = {
@@ -166,14 +283,69 @@ function ChatApp(props: {
 					return;
 				}
 
+				// Enter submits
 				if (key.return) {
 					const msg = buf.trim();
 					if (!msg || busy) return;
 					setBuf("");
 					void (async () => {
 						setBusy(true);
-						setLines((L) => [...L, `[user] ${msg}`]);
+						addMsg("user", "user", msg);
 						try {
+							// ── Exit phrases ────────────────────────────────────────
+							const msgLower = msg.toLowerCase().trim();
+							if (msgLower === "exit" || msgLower === "quit") {
+								addMsg("system", "system", "Exiting pi-multi-team-local…");
+								setBusy(false);
+								await new Promise((r) => setTimeout(r, 80));
+								exit();
+								return;
+							}
+							if (
+								msgLower === "ctrl+c" ||
+								msgLower === "ctrl + c" ||
+								msgLower === "^c"
+							) {
+								addMsg(
+									"system",
+									"system",
+									"Press the actual Ctrl+C keyboard shortcut to exit.",
+								);
+								setBusy(false);
+								return;
+							}
+							// ── Shell command guard ──────────────────────────────────
+							if (isShellLike(msg)) {
+								const firstWord = msg.trim().split(/\s+/)[0];
+								addMsg(
+									"system",
+									"system",
+									`"${firstWord}" looks like a shell command. Run it in your terminal after exiting with Ctrl+C.`,
+								);
+								setBusy(false);
+								return;
+							}
+							// ── Slash commands ───────────────────────────────────────
+							if (msg === "/help") {
+								for (const line of HELP_LINES) {
+									addMsg("help", "help", line);
+								}
+								setBusy(false);
+								return;
+							}
+							if (msg === "/debug") {
+								setDebugMode((d) => {
+									const next = !d;
+									addMsg(
+										"system",
+										"system",
+										`Debug mode ${next ? "on" : "off"} — JSON shown ${next ? "raw" : "summarized"}`,
+									);
+									return next;
+								});
+								setBusy(false);
+								return;
+							}
 							if (msg === "/reload") {
 								const nextCfg = await loadConfig();
 								setCfg(nextCfg);
@@ -183,12 +355,11 @@ function ChatApp(props: {
 									setActiveSession(null);
 									setSessionLabel("—");
 								}
-								setLines((L) => [
-									...L,
-									"[system] config reloaded (multi-team.yaml)",
-								]);
+								addMsg("system", "system", "Config reloaded (multi-team.yaml)");
+								setBusy(false);
 								return;
 							}
+							// ── Agent dispatch ───────────────────────────────────────
 							const mode = cfg.app.session_mode ?? "per_request";
 							const sessionForTurn =
 								mode === "interactive"
@@ -213,17 +384,12 @@ function ChatApp(props: {
 										},
 									})),
 								onChat: (from, line) => {
-									const worker =
-										from.includes("dev") ||
-										from.includes("engineer") ||
-										from.includes("pragmatist") ||
-										from.includes("spec") ||
-										from.includes("qa") ||
-										from.includes("security");
-									if (!showWorkers && worker && !from.includes("lead")) return;
-									setLines((L) => [...L, `[${from}] ${line.slice(0, 2000)}`]);
+									const kind = classifyAgent(from);
+									if (!showWorkers && kind === "worker") return;
+									addMsg(kind, from, line.slice(0, 2000));
 								},
 							});
+							// Artifact count
 							try {
 								const j = (await fs.readJson(
 									join(sessionForTurn.root, "artifacts.json"),
@@ -234,97 +400,93 @@ function ChatApp(props: {
 							} catch {
 								setLastArtifactCount(null);
 							}
-							setLines((L) => [
-								...L,
-								`[system] session dir: ${sessionForTurn.root}`,
-							]);
+							addMsg("system", "system", `session → ${sessionForTurn.root}`);
 						} catch (e) {
-							setLines((L) => [...L, `[error] ${String(e)}`]);
+							addMsg("error", "error", String(e));
 						} finally {
 							setBusy(false);
 						}
 					})();
 					return;
 				}
+
+				// Backspace
 				if (key.backspace || key.delete) {
 					setBuf((b) => b.slice(0, -1));
 					return;
 				}
-				if (input === "\t") {
-					setShowWorkers((w) => !w);
-					setLines((L) => [
-						...L,
-						`[ui] worker chatter ${!showWorkers ? "on" : "off"}`,
-					]);
+
+				// 'd' with empty buffer toggles debug mode
+				if (input === "d" && buf === "") {
+					setDebugMode((dm) => {
+						const next = !dm;
+						addMsg("system", "system", `Debug ${next ? "on" : "off"}`);
+						return next;
+					});
 					return;
 				}
+
+				// Tab toggles worker chatter
+				if (input === "\t") {
+					setShowWorkers((w) => {
+						const next = !w;
+						addMsg("system", "system", `Worker chatter ${next ? "on" : "off"}`);
+						return next;
+					});
+					return;
+				}
+
+				// Regular character input
 				if (input && !key.ctrl && !key.meta) setBuf((b) => b + input);
 			},
-			[buf, busy, cfg, props, exit, showWorkers, activeSession, createSession],
+			[
+				buf,
+				busy,
+				cfg,
+				props,
+				exit,
+				showWorkers,
+				activeSession,
+				createSession,
+				addMsg,
+			],
 		),
 	);
 
+	// ── Render ─────────────────────────────────────────────────────────
 	return (
 		<Box flexDirection="column">
-			<Box flexDirection="column" marginBottom={1}>
-				{lines.slice(-25).map((l, i) => (
-					<Text key={`${i}-${l.slice(0, 48)}`}>{l}</Text>
+			{/* Persistent header strip */}
+			<Header
+				topologyLine={topologyLine}
+				showWorkers={showWorkers}
+				debugMode={debugMode}
+			/>
+
+			{/* Scrolling chat pane — last N messages */}
+			<Box flexDirection="column" marginTop={1}>
+				{messages.slice(-20).map((m) => (
+					<MessageRow key={m.id} msg={m} debug={debugMode} />
 				))}
 			</Box>
-			{approval ? (
-				<Box
-					flexDirection="column"
-					borderStyle="round"
-					borderColor="yellow"
-					paddingX={1}
-					marginBottom={1}
-				>
-					<Text bold color="yellow">
-						APPROVAL REQUIRED — press 1–4
-					</Text>
-					<Text>
-						agent={approval.agent} team={approval.team ?? "—"} tool=
-						{approval.tool}
-					</Text>
-					<Text dimColor>action: {approval.action}</Text>
-					<Text dimColor>reason: {approval.reason}</Text>
-					{approval.paths.length ? (
-						<Text dimColor>paths: {approval.paths.join(", ")}</Text>
-					) : null}
-					{approval.command ? (
-						<Text dimColor>cmd: {approval.command}</Text>
-					) : null}
-					<Text dimColor>
-						1=approve once | 2=deny | 3=approve session | 4=cancel turn
-					</Text>
-				</Box>
-			) : null}
-			<Text color="cyan">
-				{busy ? "… running (or awaiting approval — use 1–4) …" : "> "}
-				{buf}
-			</Text>
-			<Text dimColor>
-				session={sessionLabel} mode={cfg.app.session_mode ?? "per_request"} |
-				teams={topologyLine || "—"} | last artifacts={lastArtifactCount ?? "—"}{" "}
-				| Tab=workers {showWorkers ? "on" : "off"}
-			</Text>
-			<Text dimColor>
-				{Object.entries(status)
-					.slice(0, 8)
-					.map(([a, s]) => `${a}:${s}`)
-					.join(" | ")}
-			</Text>
-			<Text dimColor>
-				tokens≈{usage.total} (best-effort
-				{process.env.PI_MOCK === "1"
-					? "; PI_MOCK est. 140/turn"
-					: "; live SDK: n/a"}
-				) |{" "}
-				{Object.entries(usage.byAgent)
-					.slice(0, 6)
-					.map(([a, n]) => `${a}:${n}`)
-					.join(" ")}
-			</Text>
+
+			{/* Approval gate (only when active) */}
+			{approval ? <ApprovalBox approval={approval} /> : null}
+
+			{/* Composer */}
+			<Composer buf={buf} busy={busy} />
+
+			{/* Status bar */}
+			<StatusBar
+				sessionLabel={sessionLabel}
+				elapsed={elapsed}
+				usage={usage}
+				status={status}
+				lastArtifactCount={lastArtifactCount}
+				sessionMode={cfg.app.session_mode ?? "per_request"}
+				mock={process.env.PI_MOCK === "1"}
+				modelByAgent={modelByAgent}
+			/>
 		</Box>
 	);
 }
@@ -408,7 +570,7 @@ async function cmdStart(): Promise<void> {
 		<ChatApp
 			cfg={cfg}
 			sessionsBase={base}
-			initialShowWorkers={cfg.app.default_show_workers ?? true}
+			initialShowWorkers={cfg.app.default_show_workers ?? false}
 			approvalAuto={approvalAuto}
 		/>,
 	);

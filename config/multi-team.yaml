@@ -3,7 +3,7 @@ app:
   sessions_dir: ./.runtime/sessions
   session_mode: per_request
   repo_root: .
-  default_show_workers: true
+  default_show_workers: false
   default_timeout_ms: 900000
 
 models:
@@ -47,6 +47,7 @@ orchestrator:
     - mental-model
     - delegation-protocol
     - synthesis-first-reporting
+    - library
   domain:
     read:
       - .
@@ -72,6 +73,7 @@ teams:
         - zero-micromanagement
         - delegation-protocol
         - planning-handoff-discipline
+        - library
       tools:
         - delegate
       domain:
@@ -128,6 +130,7 @@ teams:
         - zero-micromanagement
         - implementation-handoff-discipline
         - delegation-protocol
+        - library
       domain:
         read:
           - .
@@ -186,6 +189,7 @@ teams:
       skills:
         - validation-handoff-discipline
         - delegation-protocol
+        - library
       domain:
         read:
           - .

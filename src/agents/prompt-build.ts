@@ -10,10 +10,23 @@ export async function loadPromptFile(rel: string): Promise<string> {
 
 export async function loadSkillFiles(names: string[]): Promise<string> {
 	const parts: string[] = [];
+	const seen = new Set<string>();
 	for (const n of names) {
-		const p = resolve(PROJECT_ROOT, ".pi/skills", `${n}.md`);
-		if (await fs.pathExists(p))
-			parts.push(`## Skill: ${n}\n\n${await fs.readFile(p, "utf8")}`);
+		if (seen.has(n)) continue;
+		seen.add(n);
+		const candidates = [
+			resolve(PROJECT_ROOT, ".pi/skills", `${n}.md`),
+			resolve(PROJECT_ROOT, ".pi/skills", n, "SKILL.md"),
+			resolve(PROJECT_ROOT, "vendor", n, "SKILL.md"),
+		];
+		let loaded: string | null = null;
+		for (const p of candidates) {
+			if (await fs.pathExists(p)) {
+				loaded = await fs.readFile(p, "utf8");
+				break;
+			}
+		}
+		if (loaded) parts.push(`## Skill: ${n}\n\n${loaded}`);
 	}
 	return parts.join("\n\n");
 }

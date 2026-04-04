@@ -4,3 +4,6 @@ dist/
 .env
 *.log
 .DS_Store
+
+# Pi CLI extension playground (disler/pi-vs-claude-code)
+.pi/agent-sessions/

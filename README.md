@@ -2,6 +2,233 @@
 
 **Faithful local recreation of a multi-tier agent architecture using public Pi (`@mariozechner/pi-coding-agent`) capabilities.** This is not the private “video” codebase; it is a sibling control plane that composes multiple real `AgentSession` instances with YAML config, policy-mediation, contracts, and session artifacts.
 
+## Current Capability Snapshot
+
+- **Control plane** — Operator-grade, **supervised** local multi-agent Ink app: YAML teams, mediated tools, policy gates, contracts, session artifacts under `.runtime/sessions/`. Implemented in `src/` + [`config/multi-team.yaml`](config/multi-team.yaml).
+- **Pi CLI playground** — Real **`pi`** extension stacks for transcript-style UX: **v0–v13** via `npm run pi-tier:v0` … `npm run pi-tier:v13` (and matching `npm run pi-play:*` / `just` recipes). Code in [`extensions/`](extensions/) and [`.pi/agents/`](.pi/agents/).
+- **Tier 1 (v0–v8)** — Footers, themes, cross-agent discovery, purpose gate, tool counters, subagent, TillDone ([`docs/pi-playground/TIER1-VARIANTS.md`](docs/pi-playground/TIER1-VARIANTS.md)).
+- **Tier 2 (v9–v12)** — Agent team (`dispatch_agent`), `/system`, damage-control rules, agent chains ([`docs/pi-playground/TIER2-ORCHESTRATION.md`](docs/pi-playground/TIER2-ORCHESTRATION.md)).
+- **Tier 3 (v13)** — Pi Pi meta-agent: expert markdown + `query_experts` ([`docs/pi-playground/TIER3-META-AGENT.md`](docs/pi-playground/TIER3-META-AGENT.md)).
+- **Transcript coverage** — Playground features from the integration transcript are **implemented** and **load-tested** (`pi … --help` per stack). **Full UX** is **not** proven by automation; see [Verification Status](#verification-status) and [TRANSCRIPT-FEATURE-TEST-MATRIX.md](docs/pi-playground/TRANSCRIPT-FEATURE-TEST-MATRIX.md).
+- **Maturity (plain English)** — Solid for **experimentation and supervised local use**: real orchestration and policy code on the control plane; real Pi extensions for the playground. **Not** a claim of unattended production autonomy, full UI test coverage, or identical behavior to any private Pi product.
+
+## Verification Status
+
+What “verified” means here is intentionally narrow: **structural** checks are automated; **interactive** behavior is on you.
+
+### Structurally Verified
+
+These run in CI or locally without opening the full Ink/Pi TUIs and without calling live models (unless noted):
+
+| Mechanism | Proves |
+|-----------|--------|
+| `npm run typecheck` | Control plane + declared types compile (`tsc --noEmit`). |
+| `npm run lint` | Biome clean on `src/`, `config/`, `scripts/`. |
+| `npm test` | **Shell guard** unit tests + **prompt-build** smoke (`src/cli/shell-guard.test.ts`, `src/agents/prompt-build.test.ts`). |
+| `npm run check` | All of the above in one command. |
+| `npm run verify-tier2` | Playground **YAML**: `teams.yaml`, `agent-chain.yaml` (`full-review`), sample **damage-control** rule match (e.g. `git reset --hard`). |
+| `npm run verify-tier3` | Pi Pi **expert files** + `teams.yaml` `pi-pi` roster + **optional** `pi -e extensions/pi-pi.ts … --help` if `pi` is on PATH. |
+| `npm run pi-play:verify` | Every documented stack: **`pi -e … --help` exits 0** — **extension registration / load only**, not chat behavior. Fails if `pi` is missing. |
+| `npm run pi-play:verify-if-available` | Same as above when `pi` exists; **exits 0** with a skip message if `pi` is absent (typical CI without Pi installed). |
+| `npm run verify:playground` | `verify-tier2` + `verify-tier3` + `pi-play:verify-if-available`. |
+| `PI_MOCK=1 npm run demo` | Control plane **demo path** runs without live LLM; writes **session-style artifacts** for layout/pipeline smoke (not a substitute for production hardening). |
+
+`npm run policy-check` exists for policy configuration inspection; it is **not** part of the default `check` script.
+
+### Interactively Verified
+
+The repo **does not** ship Playwright (or similar) for Ink/Pi. Nothing here certifies that footers, widgets, `/sub`, `/chain`, damage-control prompts, or `query_experts` behave correctly in a real session. Those outcomes are **interactively verified** only when **you** run `npm run start`, `npm run pi-play:…`, or `npm run pi-tier:vN` in a **real terminal** and exercise the flows. The [Transcript Feature Test Matrix](docs/pi-playground/TRANSCRIPT-FEATURE-TEST-MATRIX.md) records **pass/partial/fail** with that distinction.
+
+### Requires Real Terminal / Real Keys
+
+| Need | Why |
+|------|-----|
+| **Real terminal** | Ink and Pi are terminal TUIs; pseudo-TTY behavior, keyboard shortcuts, and overlays are not covered by `pi --help` smokes. |
+| **Anthropic (or configured) API keys** | **Live** model turns on the control plane (`npm run start` without `PI_MOCK=1`) and in Pi playground sessions. Keys in **shell env** for Pi (Pi does **not** load `.env` automatically). |
+| **`pi` on PATH** | Required for `pi-tier:v*`, `pi-play:*`, and `pi-play:verify`. |
+
+### Known Operational Boundaries
+
+- **`pi-play:verify`** (and `--help` smokes) prove **stack loading**, not **correctness** of agent behavior, tools, or UI.
+- **Mock vs live** — `PI_MOCK=1` (with `npm run demo` or `PI_MOCK=1 npm run start`) **skips real LLM calls** but still exercises much of the pipeline; **live** mode needs keys and may incur cost/latency.
+- **Cancellation / side effects** — Once a mediated or external tool has started, **absolute** prevention of all side effects is **not** guaranteed; orchestration can still mark abandonment and ignore late results. See [Known Operational Caveat](#known-operational-caveat) below.
+
+## Fast Start Paths
+
+Install once:
+
+```bash
+cd pi-multi-team-local
+npm install
+cp .env.example .env   # optional: for control-plane convenience (Pi still wants keys in shell)
+```
+
+**Control plane**
+
+```bash
+npm run check-env
+npm run start                    # live Ink TUI (needs keys unless you use mock)
+PI_MOCK=1 npm run start          # Ink TUI without live LLM (same env flag as demo path)
+PI_MOCK=1 npm run demo           # non-interactive demo: pipeline + artifacts, no API
+```
+
+**Pi playground** (install [`pi`](https://github.com/badlogic/pi-mono), export keys in shell)
+
+```bash
+npm run pi-tier:v0               # … through …
+npm run pi-tier:v13              # stock Pi → Pi Pi meta stack
+npm run pi-play:minimal          # example: footer + themes
+```
+
+**Verification**
+
+```bash
+npm run check                    # typecheck + lint + test
+npm run verify-tier2
+npm run verify-tier3
+npm run pi-play:verify           # all stacks; requires pi on PATH
+npm run pi-play:verify-if-available   # skips if pi missing
+npm run verify:playground        # tier2 + tier3 + pi-play verify-if-available
+just verify                      # check + tier2 + tier3 + pi-play verify-if-available
+```
+
+## What To Use When
+
+| Situation | Use |
+|-----------|-----|
+| **Supervised multi-team coding** with contracts, policy, artifacts | **Control plane** — `npm run start` (or `PI_MOCK=1 npm run demo` to learn layout). |
+| **Transcript-style Pi UX** (themes, teams, chains, meta-agent) | **Pi playground** — `npm run pi-tier:vN` or `npm run pi-play:*`. |
+| **CI, onboarding, no keys** | **`npm run check`**, **`npm run verify-tier2`**, **`npm run verify-tier3`**; **`PI_MOCK=1 npm run demo`** for control-plane structure. |
+| **Local keys + real agents** | **Live** control plane or Pi; ensure keys in environment. |
+| **Tier 1** | v0–v8: UI variants (footer, tilldone, subagent, …). |
+| **Tier 2** | v9–v12: dispatch, `/system`, damage-control, `/chain`. |
+| **Tier 3** | v13: Pi Pi + `query_experts` + expert docs. |
+
+## Structural vs Interactive Proof Matrix
+
+| Area | Verified By | Confidence | Notes |
+|------|-------------|------------|--------|
+| Control-plane build health | `npm run typecheck`, `npm run lint`, `npm test` / `npm run check` | **High** for compile/lint/unit scope; **not** E2E Ink. |
+| Mock demo | `PI_MOCK=1 npm run demo` | **Medium–high** for pipeline/artifact **shape**; no live LLM. |
+| Session artifacts | `PI_MOCK=1 npm run demo` + inspect `.runtime/sessions/` | **Medium** — files written; **semantic** quality of content not fully asserted. |
+| Policy checks | `npm run policy-check` (optional) | **Config-level**; not a substitute for full policy review. |
+| Shell guard | `npm test` (`shell-guard.test.ts`) | **High** for guarded patterns covered by tests. |
+| Tier 1 stack loading | `npm run pi-play:verify` (or `-if-available`) | **Medium** — **load/smoke** only (`pi --help`). |
+| Tier 2 orchestration config | `npm run verify-tier2` | **High** for checked YAML/regex samples; **not** full runtime. |
+| Tier 3 meta-agent structure | `npm run verify-tier3` | **High** for files/roster; **optional** `pi --help` when `pi` present. |
+| Pi interactive UX | Manual run: `npm run pi-play:*` / `pi-tier:v*` | **Low** from automation; **only** you in a terminal. |
+| Live model execution | Keys + `npm run start` or Pi session | **Not** proven by repo scripts beyond your own runs. |
+
+## Recommended Next Manual Checks
+
+1. **Control plane** — `npm run check-env`, then `PI_MOCK=1 npm run start` (or live `npm run start` with keys); send one prompt, confirm `.runtime/sessions/<id>/` appears with expected files.
+2. **Pi playground** — With `pi` + keys: `npm run pi-tier:v2` or `npm run pi-play:minimal`; confirm footer/themes in the TUI.
+3. **Live** — If keys are set: one real task on the control plane and one short Pi session to validate tools and model responses.
+
+---
+
+## Control Plane vs Pi CLI Playground
+
+| | Control plane | Pi CLI playground |
+|--|----------------|-------------------|
+| **Entry** | `npm run start` → `src/cli/main.tsx` | `pi -e extensions/…` or `npm run pi-play:*` / `npm run pi-tier:vN` |
+| **Config** | [`config/multi-team.yaml`](config/multi-team.yaml) | [`extensions/`](extensions/) + [`.pi/agents/`](.pi/agents/), [`.pi/settings.json`](.pi/settings.json) |
+| **Sessions / logs** | [`.runtime/sessions/<id>/`](.runtime/sessions/) — `events.jsonl`, `summary.md`, … | [`.pi/agent-sessions/`](.pi/agent-sessions/) (gitignored; team/chain dispatch) |
+| **Orchestration** | TypeScript (`src/control-plane/`) | In-extension: `agent-team`, `agent-chain`, … |
+
+**Playground-only:** [`.pi/themes/`](.pi/themes/), [`.pi/damage-control-rules.yaml`](.pi/damage-control-rules.yaml), [docs/pi-playground/](docs/pi-playground/). **Control-plane-only:** `src/`, `config/multi-team.yaml`, [.pi/prompts/](.pi/prompts/), [.pi/experts/](.pi/experts/). **Shared:** [`.pi/skills/`](.pi/skills/) (see [Library skill](#library-skill-vendorlibrary) below).
+
+## Transcript Variants
+
+Transcript-aligned **Tier 1** Pi presets (v0–v8). Details: [docs/pi-playground/TIER1-VARIANTS.md](docs/pi-playground/TIER1-VARIANTS.md).
+
+| Tier | You get | Launch |
+|------|---------|--------|
+| v0 | Stock Pi | `npm run pi-tier:v0` / `just tier-v0` / `just pi` |
+| v1 | Pure focus (no footer) | `npm run pi-tier:v1` / `just tier-v1` / `just ext-pure-focus` |
+| v2 | Minimal footer + theme cycler | `npm run pi-tier:v2` / `just tier-v2` / `npm run pi-play:minimal` |
+| v3 | Cross-agent dirs + minimal | `npm run pi-tier:v3` / `just ext-cross-agent` |
+| v4 | Purpose gate + minimal | `npm run pi-tier:v4` / `just ext-purpose-gate` |
+| v5 | Tool counter footer | `npm run pi-tier:v5` / `just ext-tool-counter` |
+| v6 | Tool counter widget + minimal + themes | `npm run pi-tier:v6` / `just ext-tool-counter-widget` |
+| v7 | Subagent + pure focus + themes | `npm run pi-tier:v7` / `just ext-subagent-widget` |
+| v8 | TillDone + themes | `npm run pi-tier:v8` / `just ext-tilldone` |
+
+Same stacks via **`npm run pi-play:<name>`** (e.g. `pi-play:cross-agent`). **`just --list`** shows every `ext-*` and `tier-*` recipe.
+
+## Orchestration Features
+
+**Tier 2** — teams, personas, safety, pipelines. Doc: [docs/pi-playground/TIER2-ORCHESTRATION.md](docs/pi-playground/TIER2-ORCHESTRATION.md).
+
+| Tier | You get | Launch |
+|------|---------|--------|
+| v9 | `dispatch_agent` + [`.pi/agents/teams.yaml`](.pi/agents/teams.yaml) | `npm run pi-tier:v9` / `just ext-agent-team` |
+| v10 | `/system` persona picker + minimal + themes | `npm run pi-tier:v10` / `just ext-system-select` |
+| v11 | Damage-control + [`.pi/damage-control-rules.yaml`](.pi/damage-control-rules.yaml) | `npm run pi-tier:v11` / `just ext-damage-control` |
+| v12 | `/chain` + [`.pi/agents/agent-chain.yaml`](.pi/agents/agent-chain.yaml) | `npm run pi-tier:v12` / `just ext-agent-chain` |
+
+YAML smoke (no TUI): **`npm run verify-tier2`**.
+
+## Meta-Agent
+
+**Tier 13** — Pi Pi meta-orchestrator, expert markdown under [`.pi/agents/pi-pi/`](.pi/agents/pi-pi/), `query_experts`. Doc: [docs/pi-playground/TIER3-META-AGENT.md](docs/pi-playground/TIER3-META-AGENT.md). Examples: [`examples/meta-agent/`](examples/meta-agent/).
+
+| Launch | `npm run pi-tier:v13` / `npm run pi-play:pi-pi` / `just tier-v13` / `just ext-pi-pi` |
+| Dry-run | `npm run verify-tier3` |
+
+## Testing
+
+Semantics for **structural vs interactive** proof: [Verification Status](#verification-status). For **feature-by-feature** playground status: [Transcript Feature Test Matrix](docs/pi-playground/TRANSCRIPT-FEATURE-TEST-MATRIX.md).
+
+| Command | What it runs |
+|---------|----------------|
+| `npm run check` | `typecheck` + `lint` + `test` |
+| `npm run verify-tier2` | `teams.yaml`, chain, damage-control sample rule |
+| `npm run verify-tier3` | Pi Pi expert files + optional `pi --help` |
+| `npm run pi-play:verify` | Every stack: `pi … --help` (needs `pi` on PATH) |
+| `npm run pi-play:verify-if-available` | Same, skips cleanly if `pi` missing |
+| `npm run verify:playground` | tier2 + tier3 + `pi-play:verify-if-available` |
+| `just verify` | `check` + tier2 + tier3 + `pi-play:verify-if-available` |
+
+**Feature checklist (pass/partial/fail):** [docs/pi-playground/TRANSCRIPT-FEATURE-TEST-MATRIX.md](docs/pi-playground/TRANSCRIPT-FEATURE-TEST-MATRIX.md).
+
+### Cheat sheet
+
+**Launch → variant (short names)**
+
+| `npm run …` | Variant |
+|-------------|---------|
+| `pi-play:default` | Plain Pi |
+| `pi-play:pure-focus` | No footer |
+| `pi-play:minimal` | Minimal footer + `/theme` + theme keys |
+| `pi-play:cross-agent` | Load `.claude/` / `.gemini/` / `.codex` commands |
+| `pi-play:purpose-gate` | Purpose dialog + widget |
+| `pi-play:tool-counter` | Footer tallies |
+| `pi-play:tool-counter-widget` | Tool widget + minimal + themes |
+| `pi-play:subagent-widget` | `/sub` family |
+| `pi-play:tilldone` | TillDone tool |
+| `pi-play:agent-team` | Team dispatcher |
+| `pi-play:system-select` | `/system` |
+| `pi-play:damage-control` | Shell policy prompts |
+| `pi-play:agent-chain` | `/chain` |
+| `pi-play:pi-pi` | Meta `query_experts` |
+| `pi-play:session-replay` | `/replay` timeline |
+| `pi-play:theme-cycler` | Themes only (with minimal) |
+
+**Interactive-only (need real TUI + usually API keys):** purpose dialog, TillDone gating in session, `/sub`, `dispatch_agent` runs, `/chain` steps, damage-control approvals, `query_experts`, theme keybinds, session replay overlay. **`pi-play:verify`** only checks that extensions **load**.
+
+**Where things live**
+
+| Kind | Path |
+|------|------|
+| Control plane session artifacts | `.runtime/sessions/<id>/` |
+| Pi playground agent sessions | `.pi/agent-sessions/` (gitignored) |
+| Playground teams / chains | `.pi/agents/teams.yaml`, `agent-chain.yaml` |
+| Playground themes | `.pi/themes/` |
+| Extension source | `extensions/*.ts` |
+
+---
+
 ## Current Maturity
 
 ### Status
@@ -205,32 +432,120 @@ These are enforced in **code**, not by prompts alone.
 2. **Git** — Session artifacts include **`changed-files.json`** and **`git-diff.patch`**. **`commits_enabled`** defaults to false; no auto-commit. Optional **`create_session_branch`** and supervised **`git commit`** when commits are enabled and **`require_approval_before_commit`** is set.
 3. **Delegation contract** — Handoffs use a **Zod-validated** JSON envelope (first balanced `{…}` in output, one repair retry, then **`contract_error`**). Prose is not treated as structured data if parsing fails.
 
-## Install
-
-```bash
-cd <your-workspace>/pi-multi-team-local
-npm install
-cp .env.example .env
-# set ANTHROPIC_API_KEY for live runs
-```
-
-Reference monorepo (optional): `<your-workspace>/pi-mono`
-
-## Run
+## Control plane runbook
 
 ```bash
 npm run check-env
-npm run start          # Ink TUI; Tab toggles workers; /reload config; Ctrl+C exit
-PI_MOCK=1 npm run demo # no API keys — structure + artifact smoke test (expertise dry-run)
+npm run start              # Ink TUI; Tab toggles workers; /reload; Ctrl+C exit
+PI_MOCK=1 npm run demo   # no API keys — pipeline + artifacts (expertise dry-run)
 npm run replay -- .runtime/sessions/<id> --dump
 npm run export-timeline -- .runtime/sessions/<id> [--out=./timeline.md]
+npm run inspect-session -- .runtime/sessions/<id>
 ```
 
-Environment:
-
-- **`PI_MOCK=1`** — skips LLM calls; still runs pipeline and writes session artifacts (for CI / layout tests).
+- **`PI_MOCK=1`** — skips LLM calls; still writes session artifacts (CI / layout tests).
 - **`PI_APPROVAL_AUTO=1`** — auto-approves supervised gates (dev only).
-- **`PI_EXPERTISE_DRY_RUN=1`** — log `expertise_updated` without writing expert files (set automatically for `npm run demo`).
+- **`PI_EXPERTISE_DRY_RUN=1`** — log `expertise_updated` without writing expert files (`npm run demo` sets this).
+
+Optional monorepo: sibling `../pi-mono` or `PI_MONO_PATH` — `npm run check-env` warns if missing.
+
+Pi playground stacks, tiers, verification, and file layout: [Quick Start](#quick-start) and [Testing](#testing) above. Background: [disler/pi-vs-claude-code](https://github.com/disler/pi-vs-claude-code).
+
+## Transcript feature coverage
+
+Spec source: integration transcript describing [disler/pi-vs-claude-code](https://github.com/disler/pi-vs-claude-code) (extensions table + usage). Status is for this repo’s **Pi CLI playground** only.
+
+| Feature | Status | How to run | What proves it works |
+|--------|--------|------------|----------------------|
+| Default Pi | Implemented | `npm run pi-play:default` or `just pi` | Pi starts; `pi --help` shows usage. |
+| Pure focus Pi | Implemented | `npm run pi-play:pure-focus` | No footer; extension status keys cleared. Stack **after** theme-cycler if you need both: `pi -e extensions/theme-cycler.ts -e extensions/pure-focus.ts`. |
+| Minimal footer Pi | Implemented | `npm run pi-play:minimal` | Footer shows model + `[####------] nn%` context meter. |
+| Cross-agent path loading | Implemented | `npm run pi-play:cross-agent` | Boot notify lists `/commands`, `/skill:*`, `@agents` from `.claude/`, `.gemini/`, `.codex/`, `.pi/agents/`. |
+| Purpose-gate widget | Implemented | `npm run pi-play:purpose-gate` | Dialog asks for purpose; widget + `<purpose>` injected into system prompt; prompts blocked until set. |
+| Tool counter footer | Implemented | `npm run pi-play:tool-counter` | Two-line footer with token/cost and per-tool tallies after tool use. |
+| Tool counter widget | Implemented | `npm run pi-play:tool-counter-widget` | Widget above editor updates per tool. |
+| Theme cycler | Implemented | `npm run pi-play:theme-cycler` or any `*-theme-cycler` stack | Ctrl+X / Ctrl+Q cycle; `/theme` picker; swatch widget. |
+| Subagent widget | Implemented | `npm run pi-play:subagent-widget` | `/sub …` spawns background agent; widgets show progress (needs live Pi + API). |
+| TillDone / task gating | Implemented | `npm run pi-play:tilldone` | TillDone tool + footer task list; status key `tilldone` (fixed arg order vs Pi API). |
+| Agent team | Implemented | `npm run pi-play:agent-team` | Team pick at boot; `dispatch_agent` to `.pi/agents/` roster; grid dashboard. |
+| System select | Implemented | `npm run pi-play:system-select` | `/system` loads personas from `.pi/agents`, `.claude/agents`, etc. (incl. `~/.pi/agents`). |
+| Damage control | Implemented | `npm run pi-play:damage-control` | Loads [.pi/damage-control-rules.yaml](.pi/damage-control-rules.yaml); blocks/asks on policy (live Pi). |
+| Agent chain / pipeline | Implemented | `npm run pi-play:agent-chain` | `/chain` + [.pi/agents/agent-chain.yaml](.pi/agents/agent-chain.yaml). |
+| Meta-agent (Pi Pi) | Implemented | `npm run pi-play:pi-pi` | Expert grid under [.pi/agents/pi-pi/](.pi/agents/pi-pi/); parallel research tools (live Pi). |
+| Session replay | Implemented | `npm run pi-play:session-replay` | Extension loads; timeline overlay per [extensions/session-replay.ts](extensions/session-replay.ts). |
+
+**Batch smoke test (no full TUI session):** `npm run pi-play:verify` — runs `pi … --help` for each stacked extension bundle.
+
+**Gap triage (spec vs repo):**
+
+- **Implemented:** All rows above; assets under `extensions/`, `.pi/agents/`, `.pi/themes/`, `justfile`, and `specs/pi-vs-claude-code/`.
+- **Partial:** None material after fixing `setStatus` usage in TillDone/Damage-Control and global `~/.pi/agents` scan in system-select.
+- **Missing:** Nothing from the transcript table. CI runs `npm run pi-play:verify-if-available` (see `.github/workflows/ci.yml`).
+- **Risky / unclear:** Subagent/agent-team/agent-chain/pi-pi require **`pi` on PATH** and API keys for meaningful runs; `pi-play:verify` only checks extension load. Pure-focus + theme-cycler: put **pure-focus last** in `-e` order to clear theme status.
+
+## Library skill (`vendor/library/`)
+
+The [**library**](https://github.com/disler/the-library) meta-skill is **vendored in-repo** at [`vendor/library/`](vendor/library/) (full tree: `SKILL.md`, `library.yaml`, `cookbook/`, etc.) so the multi-team control plane works offline and stays reproducible without cloning a separate skills repo at session start.
+
+### How skill names resolve
+
+In [`src/agents/prompt-build.ts`](src/agents/prompt-build.ts), each configured skill name is loaded **at most once** (duplicate YAML entries are ignored). For a name like `library`, the loader tries in order:
+
+1. `.pi/skills/<name>.md`
+2. `.pi/skills/<name>/SKILL.md`
+3. `vendor/<name>/SKILL.md` ← **library** resolves here as `vendor/library/SKILL.md`
+
+So the vendored copy wins whenever there is no overlapping file under `.pi/skills/`.
+
+### Pointing at your fork
+
+The skill’s `## Variables` section documents **`LIBRARY_REPO_URL`**, **`LIBRARY_YAML_PATH`**, and **`LIBRARY_SKILL_DIR`**. To use your own catalog fork, edit **`vendor/library/SKILL.md`** (or your fork’s `SKILL.md`) so **`LIBRARY_REPO_URL`** is your Git remote (for example `https://github.com/<you>/the-library.git`), and align **`LIBRARY_YAML_PATH`** / **`LIBRARY_SKILL_DIR`** with where that repo lives on disk. The orchestrator and team **leads** include `library` in [`config/multi-team.yaml`](config/multi-team.yaml); workers do not, to keep worker prompts smaller.
+
+## Using the App Prompt vs Your Terminal
+
+The TUI input line is **only for agent requests**. It is not a shell.
+
+### App prompt — send these here
+
+```
+@engineering inspect the backend and propose one safe refactor
+@validation review recent changes and report risks
+ask all teams for improvements to this project
+plan -> engineer -> validate a new feature: add README section
+show the most important files in this repo
+```
+
+### App commands — also typed here
+
+| Command | Effect |
+|---------|--------|
+| `/help` | Show in-app help with examples and key bindings |
+| `/reload` | Reload `config/multi-team.yaml` without restarting |
+
+### Keyboard shortcuts
+
+| Key | Effect |
+|-----|--------|
+| `Tab` | Toggle worker-chatter visibility (hidden by default) |
+| `Ctrl+C` | Exit immediately |
+| `exit` or `quit` (typed + Enter) | Exit cleanly with a confirmation message |
+
+### Shell commands — run these in your terminal, not here
+
+```bash
+ls -la
+cat src/cli/main.tsx
+git status
+git diff HEAD
+npm run build
+./scripts/deploy.sh
+```
+
+If you type a shell command in the app prompt by mistake, the app will show a warning and **not** forward it to any agent. Press `Ctrl+C` to exit the app, then run the command in your terminal.
+
+The app detects shell-like input by first word (`ls`, `git`, `npm`, `cat`, etc.), prefix (`./`, `../`, `/bin/...`), `sudo`, chain operators (`&&`, `||`), and pipes (`|`) where the leading command is a known shell tool.
+
+---
 
 ## Config
 
