@@ -2,11 +2,181 @@
 
 **Faithful local recreation of a multi-tier agent architecture using public Pi (`@mariozechner/pi-coding-agent`) capabilities.** This is not the private “video” codebase; it is a sibling control plane that composes multiple real `AgentSession` instances with YAML config, policy-mediation, contracts, and session artifacts.
 
-## Current maturity
+## Current Maturity
 
-**Working today:** YAML config + Zod validation; orchestrator → teams → leads → workers; explicit per-team **task contracts** (`task_type`, `artifact_policy`, expected artifact kinds) enforced in envelopes; policy-mediated tools; delegation JSON contract + repair; session tree (events/conversation/routing JSONL); Ink TUI with worker toggle; **interactive supervised approvals** (1–4 keys) logging `approval_requested` / `approval_resolved`; structured **validation outcomes** (`validation_result`) with deterministic approval-gate state for later mutations in the same request; **post-turn expertise merge** into writable expert files (bounded sections, archives on growth) with `expertise_updated` events — `PI_EXPERTISE_DRY_RUN=1` during `npm run demo` so expert files are not modified; **replay** (`npm run replay -- <sessionDir>`, optional `--dump`, `--types=`, `--agent=`, `--team=`) plus Ink step mode (n/p/q); **token footer** (best-effort: mock estimates under `PI_MOCK`, otherwise labeled n/a); **`/reload`** in the TUI reloads `multi-team.yaml` between turns; optional **git session branch** (`git.create_session_branch`) and **supervised approval for `git commit`** when `commits_enabled` and `require_approval_before_commit` are set.
+### Status
+**Operator-grade supervised local multi-agent system** built on public Pi capabilities.
 
-**Deferred / not claimed:** validation-failure-driven approval gates; accurate per-call token/cost from Pi SDK; automatic opening of artifact files from replay; multi-turn topology changes mid-flight.
+This project is a faithful local recreation of the multi-team orchestration architecture using:
+- public Pi SDK/runtime capabilities
+- a separate control plane
+- code-enforced policy boundaries
+- structured task contracts
+- declared tool capability mediation
+- structured validation gating
+- per-request session isolation
+- durable session artifacts and replay/export support
+
+It is **not** a copy of any private repository or private Pi implementation.
+
+---
+
+## What This System Can Do
+
+The system supports a supervised multi-agent workflow where:
+
+- a single user prompt enters through the orchestrator
+- the orchestrator routes work to configured team leads
+- leads delegate work to workers
+- workers operate within code-enforced domain boundaries
+- results are synthesized back through the hierarchy
+- every top-level request gets its own isolated session
+- session logs, routing decisions, artifacts, validation outcomes, and policy violations are persisted
+
+Current capabilities include:
+
+- YAML-driven team topology
+- per-agent models, workdirs, skills, and expertise files
+- strict delegation envelopes with contract validation and repair retry
+- artifact accountability based on explicit task contracts
+- central tool capability registry with default-deny for unknown tools
+- policy enforcement for reads, writes, deletes, shell, package, git, config, and secrets-sensitive operations
+- supervised approval gates for risky actions
+- structured validation results that can gate further mutation
+- replay/export foundations and durable session summaries
+
+---
+
+## Trust Boundaries
+
+This system is designed around explicit trust boundaries.
+
+### 1. Control plane over agent runtime
+Pi sessions are used as agent runtimes.
+All orchestration, policy checks, approvals, contracts, and synthesis happen in the control plane.
+
+### 2. Tool mediation is enforced in code
+Agents do not directly receive unrestricted mutating tools.
+All tool access flows through mediation layers that apply:
+- declared tool capabilities
+- path/domain policy
+- approval gating
+- validation-state gating
+- logging and audit trails
+
+Unknown or unregistered tools are denied by default.
+
+### 3. Git is treated as a trust boundary
+The system produces:
+- `changed-files.json`
+- `git-diff.patch`
+- session summaries of modified files
+
+No automatic commit behavior is assumed unless explicitly enabled and gated.
+
+### 4. Contracts over prose
+Inter-agent coordination is validated through structured contracts rather than relying on freeform prose.
+This includes:
+- task contracts
+- delegation envelopes
+- validation result contracts
+- artifact obligations
+
+### 5. Sessions are first-class artifacts
+Each top-level request gets its own session directory with isolated logs, events, artifacts, prompts, and summaries.
+
+---
+
+## Known Operational Caveat
+
+### Cancellation boundary
+Timeouts and cancellation are robust at the orchestration layer:
+- timed-out agent work is aborted where supported
+- abandoned work is marked explicitly
+- late results are ignored and cannot contaminate final synthesis
+
+However, **absolute prevention of every external side effect cannot be guaranteed** once a downstream tool or runtime has already begun acting outside the control plane.
+
+In practice, this means:
+- orchestration remains correct and bounded
+- synthesis ignores abandoned/late work
+- audit logs remain accurate
+- but hard kill guarantees depend on downstream runtime/tool behavior
+
+This is a known and documented operational boundary.
+
+---
+
+## What This Project Is Best For
+
+This system is a strong fit for:
+
+- supervised local multi-agent coding workflows
+- architecture experimentation
+- orchestration and trust-boundary research
+- internal demos and operator-driven runs
+- structured planning / build / validate loops
+- controlled mutation workflows with approvals
+
+---
+
+## What This Project Is Not Yet Claiming
+
+This project is **not** currently claiming:
+
+- fully unattended destructive autonomy
+- guaranteed process-level cancellation of every external side effect
+- universal semantic validation of every artifact kind
+- production SaaS-grade multi-tenant isolation
+- a direct copy of any private multi-agent Pi system
+
+---
+
+## Recommended Use
+
+Use this system as:
+
+- an operator-grade supervised local system
+- a control plane for trusted multi-agent experimentation
+- a foundation for more advanced local agent teams
+
+Recommended operating mode:
+- start in `supervised`
+- use explicit approvals for risky actions
+- review session artifacts and validation outcomes
+- widen autonomy only when the task/tool boundary is well understood
+
+---
+
+## Near-Term Hardening Opportunities
+
+The next most valuable improvements are:
+
+1. **Artifact kind semantic validation**
+   Validate artifact kinds against stronger schemas/content expectations, not only existence and policy.
+
+2. **Stronger external side-effect containment**
+   Improve kill/isolation semantics for high-risk tool paths using deeper runtime isolation where needed.
+
+3. **Live demo mode**
+   Keep mock demo support, but add a clearly labeled live demo path using real Pi behavior when credentials are available.
+
+4. **Operator UX improvements**
+   Expand topology inspection, artifact browsing, approval history, validation-state display, and best-effort usage/cost surfacing.
+
+---
+
+## Bottom Line
+
+This project is now a **supervised, operator-grade local multi-agent system** with:
+- real orchestration
+- real policy enforcement
+- real contract validation
+- real artifact accountability
+- real validation gating
+- honest and explicit operational boundaries
+
+That is the current maturity level.
 
 ## Why a sibling project (not a fork of pi-mono)
 
