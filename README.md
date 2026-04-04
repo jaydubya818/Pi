@@ -132,6 +132,39 @@ just verify                      # check + tier2 + tier3 + pi-play verify-if-ava
 
 ---
 
+## Control Plane App vs Pi Playground
+
+Two distinct systems live in this repo. They share the same codebase but serve different purposes.
+
+### Control Plane App
+
+> Supervised multi-agent orchestration system you **operate**.
+
+| | |
+|--|--|
+| **Primary paths** | `src/`, `config/multi-team.yaml`, `.runtime/sessions/` |
+| **What it does** | Runs multiple Pi agent sessions in a supervised hierarchy (orchestrator → team leads → workers) with policy mediation, contract validation, approval gates, and durable session artifacts |
+| **Typical commands** | `npm run check-env` · `npm run start` · `PI_MOCK=1 npm run start` · `PI_MOCK=1 npm run demo` |
+| **When to use** | You want to run a real multi-agent coding task with policy enforcement, audit trails, and structured output artifacts |
+
+### Pi Playground
+
+> Pi CLI customization and extension lab you **experiment in**.
+
+| | |
+|--|--|
+| **Primary paths** | `extensions/`, `.pi/agents/`, `.pi/themes/`, `.pi/settings.json`, `.pi/damage-control-rules.yaml`, `docs/pi-playground/`, `docs/pi-vs-claude-code/`, `justfile` |
+| **What it does** | A progressive ladder of Pi CLI extensions demonstrating TUI customization, event hooks, widgets, subagent spawning, team orchestration, agent chains, and meta-agent workflows (v0–v13) |
+| **Typical commands** | `npm run pi-tier:v1` · `npm run pi-tier:v9` · `npm run pi-tier:v13` · `npm run pi-play:verify` · `just --list` |
+| **When to use** | You want to explore or build Pi extensions, try orchestration patterns, or run the transcript-aligned tier demos |
+
+### Simple Rule
+
+- **Control Plane App** = the supervised multi-agent system you operate
+- **Pi Playground** = the Pi extension laboratory you experiment in
+
+---
+
 ## Pi Playground Architecture Map
 
 One-page operator reference: **tier → extension → supporting files → launch command**.
