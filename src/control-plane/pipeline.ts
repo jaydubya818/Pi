@@ -3,7 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import fs from "fs-extra";
 import {
 	TurnCancelledError,
-	resetSessionApprovals,
+	resetApprovalQueue,
 	setSessionAutoApproveForTests,
 } from "../agents/approval-queue.js";
 import { applyExpertiseAfterTurn } from "../agents/expertise-writer.js";
@@ -19,6 +19,7 @@ import {
 import type { Multi_teamConfig, TeamConfig } from "../models/config-schema.js";
 import type { TaskContract } from "../models/task-contracts.js";
 import type { SessionContext } from "../sessions/session-context.js";
+import { TokenTracker } from "../utils/context-tokens.js";
 import { parseRouting } from "./routing.js";
 
 function autonomyFor(
@@ -296,14 +297,41 @@ export async function runUserMessage(opts: {
 	const { cfg, session } = opts;
 	const validationGate = { requiresApprovalForFurtherMutation: false };
 	const repoRoot = resolveFromRoot(cfg, cfg.app.repo_root);
+
+	// Token tracker — one per runUserMessage call, keyed to the orchestrator model.
+	const tokenTracker = new TokenTracker(cfg.orchestrator.model);
+
+	/** Accumulate tokens from agent output and fire a warning event if threshold crossed. */
+	async function trackTokens(agentName: string, text: string): Promise<void> {
+		const beforeWarn = tokenTracker.budget.warnExceeded;
+		tokenTracker.add(text);
+		tokenTracker.add(opts.userMessage);
+		const budget = tokenTracker.budget;
+		opts.onUsageDelta?.(agentName, budget.used);
+		if (!beforeWarn && budget.warnExceeded) {
+			await session.emit({
+				correlation_id: session.correlationBase,
+				event_type: "context_token_warning",
+				agent: agentName,
+				parent_agent: null,
+				team: null,
+				payload: {
+					estimated_tokens: budget.used,
+					window: budget.window,
+					fraction: Number(budget.fraction.toFixed(3)),
+					message: `Estimated context usage ${(budget.fraction * 100).toFixed(1)}% — approaching context window limit`,
+				},
+			});
+		}
+	}
 	const teamIds = cfg.teams.map((t) => t.id);
 	const timeoutMs = cfg.app.default_timeout_ms ?? 900_000;
 
 	await ensureSessionGitBranch({ cfg, repoRoot, session });
 	await ensureSessionGitBaseline({ repoRoot, session });
 
-	resetSessionApprovals();
-	if (opts.approvalAutoAccept) setSessionAutoApproveForTests(true);
+	resetApprovalQueue();
+	setSessionAutoApproveForTests(opts.approvalAutoAccept);
 
 	const route = parseRouting(opts.userMessage, teamIds);
 	await session.emit({
@@ -359,6 +387,7 @@ export async function runUserMessage(opts: {
 			parentAgent: null,
 			cbs: mediationFactory(session, opts.onAgentStatus),
 			validationGate,
+			thinkingLevel: orch.thinking,
 		},
 		timeoutMs,
 		1,
@@ -383,7 +412,7 @@ export async function runUserMessage(opts: {
 		expertiseWritable: orch.expertise?.writable ?? [],
 		result: orchRes,
 	});
-	opts.onUsageDelta?.(orch.name, process.env.PI_MOCK === "1" ? 140 : 0);
+	await trackTokens(orch.name, orchRes.text);
 
 	const enabledTeams = cfg.teams.filter(
 		(t) => t.enabled && route.teams.includes(t.id),
@@ -440,6 +469,7 @@ export async function runUserMessage(opts: {
 				cbs: mediationFactory(session, opts.onAgentStatus),
 				taskContract: teamTask,
 				validationGate,
+				thinkingLevel: lead.thinking,
 			},
 			timeoutMs,
 			1,
@@ -495,7 +525,7 @@ export async function runUserMessage(opts: {
 			expertiseWritable: lead.expertise?.writable ?? [],
 			result: leadRes,
 		});
-		opts.onUsageDelta?.(lead.name, process.env.PI_MOCK === "1" ? 140 : 0);
+		await trackTokens(lead.name, leadRes.text);
 
 		const members = team.members;
 		for (let i = 0; i < members.length; i += maxW) {
@@ -545,6 +575,7 @@ export async function runUserMessage(opts: {
 							cbs: mediationFactory(session, opts.onAgentStatus),
 							taskContract: teamTask,
 							validationGate,
+							thinkingLevel: member.thinking,
 						},
 						timeoutMs,
 						1,
@@ -599,10 +630,7 @@ export async function runUserMessage(opts: {
 						expertiseWritable: member.expertise?.writable ?? [],
 						result: wr,
 					});
-					opts.onUsageDelta?.(
-						member.name,
-						process.env.PI_MOCK === "1" ? 140 : 0,
-					);
+					await trackTokens(member.name, wr.text);
 				}),
 			);
 			for (const r of settled) {

@@ -4,6 +4,8 @@ import type { Multi_teamConfig } from "../models/config-schema.js";
 import { normalizePath } from "../policy/path-policy.js";
 import type { PolicyEngine, Violation } from "../policy/policy-engine.js";
 import type { SessionContext } from "../sessions/session-context.js";
+import { guardToolResult } from "../utils/output-guard.js";
+import { limitToolOutput } from "../utils/output-limiter.js";
 import { TurnCancelledError, askApprovalResolved } from "./approval-queue.js";
 import {
 	classifyShellCommandCapabilities,
@@ -661,7 +663,12 @@ export function wrapAgentTools(
 			}
 
 			try {
-				const result = await tool.execute(toolCallId, params, signal, onUpdate);
+				const rawResult = await tool.execute(
+					toolCallId,
+					params,
+					signal,
+					onUpdate,
+				);
 				if (tool.name === "write" || tool.name === "edit") {
 					const paths = extractPaths(tool.name, p, opts.workdir);
 					for (const abs of paths) opts.policy.noteFileTouch(abs, 10);
@@ -686,6 +693,33 @@ export function wrapAgentTools(
 					team: opts.team,
 					payload: { tool: tool.name, ok: true },
 				});
+
+				// Apply output size limiter (bash only — other tools return structured data).
+				// Apply sensitive-data guard to all tools.
+				let guardedContent = rawResult.content as Array<{
+					type: string;
+					text?: string;
+					[k: string]: unknown;
+				}>;
+				if (tool.name === "bash") {
+					const limited = limitToolOutput(guardedContent);
+					guardedContent = limited.content;
+					if (limited.truncated) {
+						await opts.session.emit({
+							correlation_id: opts.session.correlationBase,
+							event_type: "tool_output_truncated",
+							agent: opts.agentName,
+							parent_agent: null,
+							team: opts.team,
+							payload: { tool: tool.name },
+						});
+					}
+				}
+				guardedContent = guardToolResult(guardedContent);
+				const result = {
+					...rawResult,
+					content: guardedContent,
+				} as typeof rawResult;
 				return result;
 			} catch (e) {
 				if (e instanceof TurnCancelledError) throw e;

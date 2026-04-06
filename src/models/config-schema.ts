@@ -26,6 +26,8 @@ const agentBase = z.object({
 	autonomy: z.enum(["advisory", "supervised", "active"]).optional(),
 	repo_root: z.string().optional(),
 	workdir: z.string().optional(),
+	/** Thinking level forwarded to the LLM. Defaults by role: orchestrator→"medium", lead→"medium", worker→"low". */
+	thinking: z.enum(["off", "low", "medium", "high"]).optional(),
 });
 
 const teamMember = agentBase;
@@ -90,9 +92,7 @@ export const multiTeamConfigSchema = z.object({
 		})
 		.optional(),
 
-	orchestrator: agentBase.extend({
-		thinking: z.enum(["off", "low", "medium", "high"]).optional(),
-	}),
+	orchestrator: agentBase,
 
 	global_autonomy: z
 		.enum(["advisory", "supervised", "active"])

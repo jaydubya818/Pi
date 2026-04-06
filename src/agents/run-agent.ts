@@ -85,6 +85,8 @@ export type RunAgentParams = {
 	taskContract?: TaskContract;
 	abortSignal?: AbortSignal;
 	validationGate?: ValidationGateState;
+	/** Thinking level for the primary agent turn. Defaults by role: orchestrator/lead→"medium", worker→"low". */
+	thinkingLevel?: "off" | "low" | "medium" | "high";
 };
 
 export async function runAgentTurn(p: RunAgentParams): Promise<{
@@ -212,11 +214,15 @@ export async function runAgentTurn(p: RunAgentParams): Promise<{
 	const smDir = join(p.session.root, "agents", p.agentName);
 	await fs.ensureDir(smDir);
 
+	// Resolve thinking level: explicit config > role-based default
+	const resolvedThinking =
+		p.thinkingLevel ?? (p.role === "worker" ? "low" : "medium");
+
 	const { session: pi } = await createAgentSession({
 		cwd: p.workdir,
 		agentDir: join(smDir, "agentdir"),
 		model,
-		thinkingLevel: "medium",
+		thinkingLevel: resolvedThinking,
 		authStorage,
 		modelRegistry,
 		tools,

@@ -23,6 +23,8 @@ export const eventTypes = z.enum([
 	"expertise_updated",
 	"git_branch_created",
 	"validation_outcome",
+	"tool_output_truncated",
+	"context_token_warning",
 ]);
 
 export type EventType = z.infer<typeof eventTypes>;
