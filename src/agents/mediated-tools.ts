@@ -67,7 +67,7 @@ function extractDeletePathsFromCommand(
 ): string[] {
 	if (!/\b(rm|rmdir|unlink)\b/.test(command)) return [];
 	const out: string[] = [];
-	const chunks = command.split(/&&|;|\|\|/g);
+	const chunks = splitCommandSegments(command);
 	for (const chunkRaw of chunks) {
 		const chunk = chunkRaw.trim();
 		if (!/\b(rm|rmdir|unlink)\b/.test(chunk)) continue;
@@ -101,6 +101,13 @@ function tokenizeShell(command: string): string[] {
 	});
 }
 
+function splitCommandSegments(command: string): string[] {
+	return command
+		.split(/&&|;|\|\||\|/g)
+		.map((chunk) => chunk.trim())
+		.filter(Boolean);
+}
+
 function pushShellIntents(
 	out: ShellIntent[],
 	kind: ShellIntent["kind"],
@@ -132,7 +139,7 @@ export function collectShellIntents(
 	}
 
 	const intents: ShellIntent[] = [];
-	const chunks = command.split(/&&|;|\|\|/g);
+	const chunks = splitCommandSegments(command);
 	for (const chunkRaw of chunks) {
 		const chunk = chunkRaw.trim();
 		if (!chunk) continue;

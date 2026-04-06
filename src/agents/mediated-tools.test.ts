@@ -43,6 +43,18 @@ else {
 	}
 }
 
+const pipedResult = collectShellIntents(
+	"cat README.md | tee artifacts/out.txt",
+	cwd,
+);
+if (!pipedResult.ok) failures.push("piped cat|tee should be mediated");
+else {
+	const kinds = pipedResult.intents.map((intent) => intent.kind).join(",");
+	if (kinds !== "read,write") {
+		failures.push(`cat|tee should emit read,write intents; got ${kinds}`);
+	}
+}
+
 expectOk("grep foo src/index.ts", "grep path mediation");
 expectBlocked(
 	"tar -xf /tmp/archive.tar",

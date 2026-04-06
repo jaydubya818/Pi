@@ -11,6 +11,7 @@ const PKG_MANAGERS = [
 	/\bnpm\s+(i|install|ci|update|unlink)\b/,
 	/\byarn\s+(add|install)\b/,
 	/\bpnpm\s+(i|install|add)\b/,
+	/\bbun\s+(add|install|i)\b/,
 	/\bpip\s+(install|uninstall)\b/,
 	/\bcargo\s+(add|install)\b/,
 ];
@@ -63,7 +64,7 @@ export function checkShellCommand(
 		if (re.test(c) && opts.isDestructiveBlocked) {
 			return {
 				ok: false,
-				code: "destructive_shell",
+				code: "dangerous_destructive",
 				message: `Blocked pattern: ${re}`,
 			};
 		}
@@ -95,6 +96,13 @@ export function checkShellCommand(
 			ok: false,
 			code: "shell_redirection",
 			message: "Shell redirection is blocked in mediated bash",
+		};
+	}
+	if (SECRETISH.some((re) => re.test(c))) {
+		return {
+			ok: false,
+			code: "secretish_path",
+			message: "Command references a secretish path or credential file",
 		};
 	}
 	return { ok: true };

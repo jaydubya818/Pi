@@ -31,6 +31,7 @@ export class TurnCancelledError extends Error {
 
 let uiNotifier: (() => void) | null = null;
 const sessionAutoApprove = new Set<string>();
+let testAutoApproveAll = false;
 
 type Pending = {
 	req: RichApprovalRequest;
@@ -41,21 +42,33 @@ type Pending = {
 
 const pendingQueue: Pending[] = [];
 
+function resolvePendingQueue(outcome: ApprovalOutcome): void {
+	while (pendingQueue.length > 0) {
+		pendingQueue.shift()?.resolve(outcome);
+	}
+	uiNotifier?.();
+}
+
 export function setApprovalUiNotifier(fn: (() => void) | null): void {
 	uiNotifier = fn;
 }
 
 export function resetSessionApprovals(): void {
+	resolvePendingQueue({ allowed: false, cancelTurn: true });
 	sessionAutoApprove.clear();
+	testAutoApproveAll = false;
 }
 
 export function setSessionAutoApproveForTests(v: boolean): void {
-	if (v) sessionAutoApprove.add("*");
-	else sessionAutoApprove.clear();
+	testAutoApproveAll = v;
+}
+
+export function resetApprovalQueue(): void {
+	resolvePendingQueue({ allowed: false, cancelTurn: true });
 }
 
 function isSessionAutoApproved(sessionId: string): boolean {
-	return sessionAutoApprove.has("*") || sessionAutoApprove.has(sessionId);
+	return testAutoApproveAll || sessionAutoApprove.has(sessionId);
 }
 
 export function getActiveApproval():
