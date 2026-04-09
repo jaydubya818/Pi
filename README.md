@@ -159,6 +159,7 @@ Two distinct systems live in this repo. They share the same codebase but serve d
 | **What it does** | Runs multiple Pi agent sessions in a supervised hierarchy (orchestrator → team leads → workers) with policy mediation, contract validation, approval gates, and durable session artifacts |
 | **Typical commands** | `npm run check-env` · `npm run start` · `PI_MOCK=1 npm run start` · `PI_MOCK=1 npm run demo` |
 | **When to use** | You want to run a real multi-agent coding task with policy enforcement, audit trails, and structured output artifacts |
+| **External target repo (optional)** | `PI_MULTI_CONFIG=config/multi-team.external-target.yaml npm run start` — keeps harness artifacts in this repo while targeting a separate sibling repo |
 
 ### Pi Playground
 

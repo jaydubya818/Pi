@@ -573,6 +573,20 @@ async function cmdReplay(
 }
 
 async function cmdStart(): Promise<void> {
+	if (!process.stdin.isTTY || typeof process.stdin.setRawMode !== "function") {
+		console.error(
+			[
+				"start requires an interactive TTY with raw-mode support.",
+				"",
+				"Supported paths:",
+				"- Interactive harness run: npm run start",
+				"- Frozen noninteractive smoke: PI_MOCK=1 npm run demo",
+				"",
+				"If targeting an external repo, keep using PI_MULTI_CONFIG=... with the same command.",
+			].join("\n"),
+		);
+		process.exit(1);
+	}
 	const cfg = await loadConfig();
 	const base = resolve(PROJECT_ROOT, cfg.app.sessions_dir.replace(/^\.\//, ""));
 

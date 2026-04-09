@@ -13,9 +13,11 @@ export const PROJECT_ROOT = resolve(__dirname, "..", "..");
 export async function loadConfig(
 	configPath?: string,
 ): Promise<Multi_teamConfig> {
-	const path = resolve(
-		configPath ?? join(PROJECT_ROOT, "config", "multi-team.yaml"),
-	);
+	const selectedConfig =
+		configPath ??
+		process.env.PI_MULTI_CONFIG ??
+		join(PROJECT_ROOT, "config", "multi-team.yaml");
+	const path = resolve(selectedConfig);
 	const raw = await fs.readFile(path, "utf8");
 	const data = YAML.parse(raw);
 	const parsed = multiTeamConfigSchema.safeParse(data);
