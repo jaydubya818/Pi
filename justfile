@@ -95,15 +95,29 @@ ext-agent-chain:
 ext-pi-pi:
     pi -e extensions/pi-pi.ts -e extensions/theme-cycler.ts
 
+# 15. Pathfinder: minimal next-step agent for fuzzy requests
+ext-pathfinder:
+    pi --system .pi/agents/pathfinder.md -e extensions/minimal.ts -e extensions/theme-cycler.ts
+
+# 16. Mirrorline: minimal personal insight agent
+ext-mirrorline:
+    pi --system .pi/agents/mirrorline.md -e extensions/minimal.ts -e extensions/theme-cycler.ts
+
 #ext
 
-# 15. Session Replay: scrollable timeline overlay of session history (legit)
+# 17. Session Replay: scrollable timeline overlay of session history (legit)
 ext-session-replay:
     pi -e extensions/session-replay.ts -e extensions/minimal.ts
 
 # 16. Theme cycler: Ctrl+X forward, Ctrl+Q backward, /theme picker
 ext-theme-cycler:
     pi -e extensions/theme-cycler.ts -e extensions/minimal.ts
+
+# 18. Executor: context-window-efficient external API access via Executor sidecar
+# Prereq: npm install -g executor  (see https://executor.sh)
+# Commands: /executor-web · /executor-start · /executor-stop · /executor-settings
+ext-executor:
+    pi -e extensions/executor.ts -e extensions/theme-cycler.ts
 
 # Composite patterns
 
@@ -116,6 +130,16 @@ ext-guarded-team:
 # Parent must define tasks before delegating; each /sub inherits the task-driven workflow.
 ext-disciplined-subagent:
     pi -e extensions/tilldone.ts -e extensions/subagent-widget.ts -e extensions/theme-cycler.ts
+
+# Executor + agent-team: multi-agent orchestration with external API access.
+# Team agents can call execute() to reach MCP/OpenAPI/GraphQL sources without context bloat.
+ext-executor-team:
+    pi -e extensions/executor.ts -e extensions/agent-team.ts -e extensions/theme-cycler.ts
+
+# Guarded executor: damage-control audit layer + executor external API access.
+# All execute() calls are visible in .pi/logs/damage-control-*.jsonl.
+ext-guarded-executor:
+    pi -e extensions/damage-control.ts -e extensions/executor.ts -e extensions/theme-cycler.ts
 
 # utils
 
@@ -147,3 +171,4 @@ all:
     just open damage-control minimal theme-cycler
     just open agent-chain theme-cycler
     just open pi-pi theme-cycler
+    just open minimal theme-cycler

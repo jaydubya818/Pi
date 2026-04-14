@@ -13,7 +13,7 @@
     "demo": "tsx src/cli/main.tsx demo",
     "check-env": "tsx src/cli/main.tsx check-env",
     "policy-check": "tsx src/cli/main.tsx policy-check",
-    "test": "tsx src/cli/shell-guard.test.ts && tsx src/agents/prompt-build.test.ts && tsx src/agents/approval-queue.test.ts && tsx src/agents/mediated-tools.test.ts && tsx src/policy/command-policy.test.ts && tsx src/utils/output-guard.test.ts && tsx src/utils/output-limiter.test.ts && tsx src/cli/demo-exit.test.ts",
+    "test": "tsx src/cli/shell-guard.test.ts && tsx src/agents/prompt-build.test.ts && tsx src/agents/approval-queue.test.ts && tsx src/agents/mediated-tools.test.ts && tsx src/policy/command-policy.test.ts && tsx src/utils/output-guard.test.ts && tsx src/utils/output-limiter.test.ts && tsx src/cli/demo-exit.test.ts && tsx src/sofie/review.test.ts && tsx src/sofie/runtime-disabled.test.ts && tsx src/cli/demo-sofie.test.ts",
     "check": "npm run typecheck && npm run lint && npm test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src config scripts",
@@ -44,7 +44,10 @@
     "pi-play:verify": "node scripts/verify-pi-play.mjs",
     "pi-play:verify-if-available": "node scripts/pi-play-verify-if-available.mjs",
     "pi-play:guarded-team": "env PI_PLAYGROUND_LABEL='pi-play · guarded team' pi -e extensions/playground-boot.ts -e extensions/damage-control.ts -e extensions/agent-team.ts -e extensions/theme-cycler.ts",
-    "pi-play:disciplined-subagent": "env PI_PLAYGROUND_LABEL='pi-play · disciplined subagent' pi -e extensions/playground-boot.ts -e extensions/tilldone.ts -e extensions/subagent-widget.ts -e extensions/theme-cycler.ts"
+    "pi-play:disciplined-subagent": "env PI_PLAYGROUND_LABEL='pi-play · disciplined subagent' pi -e extensions/playground-boot.ts -e extensions/tilldone.ts -e extensions/subagent-widget.ts -e extensions/theme-cycler.ts",
+    "pi-play:executor": "env PI_PLAYGROUND_LABEL='pi-play · executor' pi -e extensions/playground-boot.ts -e extensions/executor.ts -e extensions/theme-cycler.ts",
+    "pi-play:executor-team": "env PI_PLAYGROUND_LABEL='pi-play · executor + team' pi -e extensions/playground-boot.ts -e extensions/executor.ts -e extensions/agent-team.ts -e extensions/theme-cycler.ts",
+    "pi-play:guarded-executor": "env PI_PLAYGROUND_LABEL='pi-play · guarded executor' pi -e extensions/playground-boot.ts -e extensions/damage-control.ts -e extensions/executor.ts -e extensions/theme-cycler.ts"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "^0.65.0",

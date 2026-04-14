@@ -30,6 +30,7 @@ export const THEME_MAP: Record<string, string> = {
 	"agent-team":         "dracula",          // rich orchestration palette
 	"cross-agent":        "ocean-breeze",     // cross-boundary, connecting
 	"damage-control":     "gruvbox",          // grounded, earthy safety
+	"executor":           "cyberpunk",        // external API access, futuristic
 	"minimal":            "synthwave",        // synthwave by default now!
 	"pi-pi":              "rose-pine",        // warm creative meta-agent
 	"pure-focus":         "everforest",       // calm, distraction-free

@@ -10,6 +10,21 @@ models:
   strategist: claude-opus
   lead: claude-opus
   worker: claude-sonnet
+  # Pi v0.67.1 — openRouterRouting in ~/.pi/models.json
+  # Configure fallbacks, ZDR, quantization, and provider sorting per model alias.
+  # Example ~/.pi/models.json entry for this setup:
+  #
+  #   "claude-opus": {
+  #     "openRouterRouting": {
+  #       "fallbacks": ["claude-sonnet"],
+  #       "quantization": "fp8",
+  #       "providerSort": { "order": ["Anthropic"] },
+  #       "maxPrice": { "prompt": 0.02, "completion": 0.06 }
+  #     }
+  #   }
+  #
+  # Strategist and leads use claude-opus; workers use claude-sonnet.
+  # Add ZDR (zero-data-retention) to the opus entry for sensitive tasks.
 
 parallelism:
   max_parallel_workers: 2
@@ -147,6 +162,11 @@ teams:
             - ./.pi/experts/backend_dev.md
         skills:
           - backend-implementation-discipline
+        # executor: when extensions/executor.ts is loaded, backend_dev can call
+        # execute() to reach external APIs (databases, SaaS, internal services)
+        # without burning context window on tool definitions.
+        # Add to pi session: pi -e extensions/executor.ts -e extensions/agent-team.ts
+        executor_enabled: true
         domain:
           read:
             - .
@@ -206,6 +226,9 @@ teams:
             - ./.pi/experts/qa_engineer.md
         skills:
           - test-validation-discipline
+        # executor: qa_engineer can call external test infrastructure (CI APIs,
+        # coverage services, feature flag systems) via execute() when loaded.
+        executor_enabled: true
         domain:
           read:
             - .

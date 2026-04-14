@@ -22,6 +22,12 @@ const TOOL_CAPABILITY_REGISTRY: Record<string, ToolCapabilityDescriptor> = {
 	write: { name: "write", capabilities: ["write"] },
 	edit: { name: "edit", capabilities: ["write"] },
 	bash: { name: "bash", capabilities: ["shell"] },
+	// pi-executor: execute runs JS/TS in the Executor runtime which manages
+	// outbound calls to MCP/OpenAPI/GraphQL sources. Classified as network+shell
+	// because it spawns a local sidecar and makes authenticated HTTP requests.
+	execute: { name: "execute", capabilities: ["network", "shell"] },
+	// resume continues a paused execute interaction — same capability surface.
+	resume: { name: "resume", capabilities: ["network", "shell"] },
 };
 
 export function getToolDescriptor(
