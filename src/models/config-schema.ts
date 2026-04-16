@@ -67,6 +67,7 @@ export const multiTeamConfigSchema = z.object({
 			enable_memory_updates: z.boolean().optional(),
 			enable_policy_enforcement: z.boolean().optional(),
 			enable_cost_tracking: z.boolean().optional(),
+			enable_sofie: z.boolean().optional(),
 		})
 		.optional(),
 

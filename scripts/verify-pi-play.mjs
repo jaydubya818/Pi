@@ -103,6 +103,28 @@ const stacks = [
 		args: ["-e", "extensions/pi-pi.ts", "-e", "extensions/theme-cycler.ts"],
 	},
 	{
+		name: "pathfinder+minimal+theme-cycler",
+		args: [
+			"--system",
+			".pi/agents/pathfinder.md",
+			"-e",
+			"extensions/minimal.ts",
+			"-e",
+			"extensions/theme-cycler.ts",
+		],
+	},
+	{
+		name: "mirrorline+minimal+theme-cycler",
+		args: [
+			"--system",
+			".pi/agents/mirrorline.md",
+			"-e",
+			"extensions/minimal.ts",
+			"-e",
+			"extensions/theme-cycler.ts",
+		],
+	},
+	{
 		name: "session-replay+minimal",
 		args: ["-e", "extensions/session-replay.ts", "-e", "extensions/minimal.ts"],
 	},

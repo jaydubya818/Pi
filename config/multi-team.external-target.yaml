@@ -30,6 +30,7 @@ features:
   enable_memory_updates: true
   enable_policy_enforcement: true
   enable_cost_tracking: true
+  enable_sofie: true
 
 global_autonomy: active
 

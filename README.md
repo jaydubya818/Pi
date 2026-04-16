@@ -95,6 +95,8 @@ PI_MOCK=1 npm run demo           # non-interactive demo: pipeline + artifacts, n
 npm run pi-play:pure-focus       # simplest extension — stripped UI
 npm run pi-play:agent-team       # multi-agent team dispatcher
 npm run pi-play:pi-pi            # Pi Pi meta-agent
+npm run pi-play:pathfinder       # Pathfinder next-step agent
+npm run pi-play:mirrorline       # Mirrorline personal insight agent
 npm run pi-play:minimal          # example: footer + themes
 ```
 
@@ -115,7 +117,7 @@ just verify                      # check + all verify scripts + pi-play verify-i
 | Situation | Use |
 |-----------|-----|
 | **Supervised multi-team coding** with contracts, policy, artifacts | **Control plane** — `npm run start` (or `PI_MOCK=1 npm run demo` to learn layout). |
-| **Transcript-style Pi UX** (themes, teams, chains, meta-agent) | **Pi playground** — `npm run pi-play:*` or `just ext-*`. |
+| **Transcript-style Pi UX** (themes, teams, chains, meta-agent, focused personas) | **Pi playground** — `npm run pi-play:*` or `just ext-*`. |
 | **CI, onboarding, no keys** | **`npm run check`**, **`npm run verify:orchestration`**, **`npm run verify:meta-agent`**; **`PI_MOCK=1 npm run demo`** for control-plane structure. |
 | **Local keys + real agents** | **Live** control plane or Pi; ensure keys in environment. |
 | **UI extensions** | Footers, themes, focus, tool counters, subagent, TillDone — `npm run pi-play:minimal` etc. |
@@ -169,7 +171,7 @@ Two distinct systems live in this repo. They share the same codebase but serve d
 |--|--|
 | **Primary paths** | `extensions/`, `.pi/agents/`, `.pi/themes/`, `.pi/settings.json`, `.pi/damage-control-rules.yaml`, `docs/pi-playground/`, `docs/pi-vs-claude-code/`, `justfile` |
 | **What it does** | A collection of Pi CLI extensions demonstrating TUI customization, event hooks, widgets, subagent spawning, team orchestration, agent chains, and meta-agent workflows |
-| **Typical commands** | `npm run pi-play:pure-focus` · `npm run pi-play:agent-team` · `npm run pi-play:pi-pi` · `npm run pi-play:verify` · `just --list` |
+| **Typical commands** | `npm run pi-play:pure-focus` · `npm run pi-play:agent-team` · `npm run pi-play:pi-pi` · `npm run pi-play:pathfinder` · `npm run pi-play:mirrorline` · `npm run pi-play:verify` · `just --list` |
 | **When to use** | You want to explore or build Pi extensions, try orchestration patterns, or run the playground stacks |
 
 ### Simple Rule
@@ -211,6 +213,8 @@ One-page operator reference: **extension → supporting files → launch command
 | Extension | Extension File(s) | Supporting Files | Launch Command | Purpose |
 |-----------|------------------|-----------------|----------------|---------|
 | **pi-pi** | `pi-pi.ts` | `.pi/agents/pi-pi/pi-orchestrator.md`, `.pi/agents/pi-pi/*.md` (13 experts), `docs/pi-playground/EXTENSIONS-META-AGENT.md` | `npm run pi-play:pi-pi` (`just ext-pi-pi`) | Meta-agent that builds Pi components; primary agent fans out to parallel read-only experts via `query_experts`, then synthesizes and writes files |
+| **pathfinder** | _(none — system prompt persona)_ | `.pi/agents/pathfinder.md`, `specs/pi-playground/pathfinder-agent.md`, `examples/pathfinder/example-interactions.md`, `docs/pi-playground/PATHFINDER-EVALUATION-RUBRIC.md` | `npm run pi-play:pathfinder` (`just ext-pathfinder`) | Minimal “next-step” agent that reframes vague requests into one clear action |
+| **mirrorline** | _(none — system prompt persona)_ | `.pi/agents/mirrorline.md`, `specs/pi-playground/mirrorline-agent.md`, `examples/mirrorline/example-conversations.md`, `docs/pi-playground/MIRRORLINE-EVALUATION-RUBRIC.md` | `npm run pi-play:mirrorline` (`just ext-mirrorline`) | Minimal personal insight agent that reflects one clear pattern and one small next step |
 
 ---
 
@@ -345,6 +349,8 @@ Semantics for **structural vs interactive** proof: [Verification Status](#verifi
 | `pi-play:damage-control` | Shell policy prompts |
 | `pi-play:agent-chain` | `/chain` |
 | `pi-play:pi-pi` | Meta `query_experts` |
+| `pi-play:pathfinder` | Minimal next-step persona |
+| `pi-play:mirrorline` | Minimal personal insight persona |
 | `pi-play:session-replay` | `/replay` timeline |
 | `pi-play:theme-cycler` | Themes only (with minimal) |
 
@@ -605,6 +611,8 @@ Spec source: integration transcript describing [disler/pi-vs-claude-code](https:
 | Damage control | Implemented | `npm run pi-play:damage-control` | Loads [.pi/damage-control-rules.yaml](.pi/damage-control-rules.yaml); blocks/asks on policy (live Pi). |
 | Agent chain / pipeline | Implemented | `npm run pi-play:agent-chain` | `/chain` + [.pi/agents/agent-chain.yaml](.pi/agents/agent-chain.yaml). |
 | Meta-agent (Pi Pi) | Implemented | `npm run pi-play:pi-pi` | Expert grid under [.pi/agents/pi-pi/](.pi/agents/pi-pi/); parallel research tools (live Pi). |
+| Pathfinder persona | Implemented | `npm run pi-play:pathfinder` | Minimal next-step agent via [.pi/agents/pathfinder.md](.pi/agents/pathfinder.md); optimized for one clear action. |
+| Mirrorline persona | Implemented | `npm run pi-play:mirrorline` | Minimal personal insight agent via [.pi/agents/mirrorline.md](.pi/agents/mirrorline.md); optimized for one clear pattern and one grounded insight. |
 | Session replay | Implemented | `npm run pi-play:session-replay` | Extension loads; timeline overlay per [extensions/session-replay.ts](extensions/session-replay.ts). |
 
 **Batch smoke test (no full TUI session):** `npm run pi-play:verify` — runs `pi … --help` for each stacked extension bundle.

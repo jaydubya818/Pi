@@ -19,6 +19,7 @@ import {
 import type { Multi_teamConfig, TeamConfig } from "../models/config-schema.js";
 import type { TaskContract } from "../models/task-contracts.js";
 import type { SessionContext } from "../sessions/session-context.js";
+import { maybeRunSofie } from "../sofie/runtime.js";
 import { TokenTracker } from "../utils/context-tokens.js";
 import { parseRouting } from "./routing.js";
 
@@ -645,4 +646,11 @@ export async function runUserMessage(opts: {
 	}
 
 	await writeSessionArtifacts({ session, repoRoot });
+	await maybeRunSofie({
+		cfg,
+		session,
+		userMessage: opts.userMessage,
+		onChat: opts.onChat,
+		repoRoot,
+	});
 }

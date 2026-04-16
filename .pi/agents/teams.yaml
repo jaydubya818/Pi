@@ -61,6 +61,16 @@ test:
     - tester
     - reviewer
 
+pathfinder:
+  description: "Minimal next-step guidance — one clear action for fuzzy requests"
+  members:
+    - pathfinder
+
+mirrorline:
+  description: "Minimal personal insight — one clear pattern, one grounded insight"
+  members:
+    - mirrorline
+
 # Tier 3 meta-agent: experts live under .pi/agents/pi-pi/
 # pi-pi extension loads these automatically; not for direct dispatch.
 pi-pi:
