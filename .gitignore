@@ -8,3 +8,12 @@ dist/
 # Pi CLI extension playground (disler/pi-vs-claude-code)
 .pi/agent-sessions/
 .pi/logs/
+
+# Claude Code session artifacts
+.claude/
+
+# Playwright CLI temp files
+.playwright-cli/
+
+# Separate project with node_modules/dist (too large to track here)
+Agentic-Pi-Harness/
